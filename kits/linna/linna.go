@@ -23,13 +23,24 @@ package linna
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
+
+	"go.uber.org/zap"
+	yaml "gopkg.in/yaml.v3"
 )
 
+var usageStr = `
+Usage: linna [options]
+    -c, --config                     配置文件地址
+    -h, --help                       显示帮助信息
+    -v, --version                    显示版本信息
+`
+
 // ParseArgs 参数解析
-func ParseArgs(v, commitid, buildAt string) string {
+func ParseArgs(log *zap.Logger, v, commitid, buildAt string) Configuration {
 	if len(os.Args) < 1 {
-		return ""
+		return NewConfiguration()
 	}
 
 	var (
@@ -45,12 +56,12 @@ func ParseArgs(v, commitid, buildAt string) string {
 
 	fs := flag.NewFlagSet("linna", flag.ExitOnError)
 	fs.Usage = usage
-	fs.BoolVar(&showVersion, "version", false, "Print version information")
-	fs.BoolVar(&showVersion, "v", false, "Print version information")
-	fs.StringVar(&fp, "c", "", "Configuration file")
-	fs.StringVar(&fp, "config", "", "Configuration file")
-	fs.BoolVar(&showHelp, "h", false, "Show help message.")
-	fs.BoolVar(&showHelp, "help", false, "Show help message.")
+	fs.BoolVar(&showVersion, "version", false, "版本信息")
+	fs.BoolVar(&showVersion, "v", false, "版本信息")
+	fs.StringVar(&fp, "c", "", "配置文件地址")
+	fs.StringVar(&fp, "config", "", "配置文件地址")
+	fs.BoolVar(&showHelp, "h", false, "显示帮助信息")
+	fs.BoolVar(&showHelp, "help", false, "显示帮助信息")
 	fs.Parse(os.Args[1:])
 	if showHelp {
 		usage()
@@ -61,15 +72,35 @@ func ParseArgs(v, commitid, buildAt string) string {
 		os.Exit(0)
 	}
 
-	return fp
-}
+	// 解析配置文件
+	if len(fp) == 0 {
+		log.Panic("配置文件地址不正确")
+	}
 
-var usageStr = `
-Usage: linna [options]
-    -c, --config                     Configuration file
-    -h, --help                       Show help message
-    -v, --version                    Show version
-`
+	// 读取配置文件
+	if _, err := os.Stat(fp); os.IsNotExist(err) {
+		log.Panic("读取配置文件错误", zap.String("error", err.Error()))
+	}
+
+	f, err := os.Open(fp)
+	if err != nil {
+		log.Panic("读取配置文件错误", zap.String("error", err.Error()))
+	}
+
+	defer f.Close()
+	data, err := ioutil.ReadAll(f)
+	if err != nil {
+		log.Panic("读取配置文件错误", zap.String("error", err.Error()))
+	}
+
+	config := NewConfiguration()
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		log.Panic("解析配置文件出错", zap.String("error", err.Error()))
+	}
+
+	config.SourceFile = fp
+	return config
+}
 
 func usage() {
 	fmt.Printf("%s\n", usageStr)
@@ -77,6 +108,14 @@ func usage() {
 }
 
 // Serve 开启linna服务
-func Serve() error {
+func Serve(config Configuration) error {
+
+	return nil
+}
+
+func Shutdown() {
+}
+
+func Reload(config Configuration) error {
 	return nil
 }

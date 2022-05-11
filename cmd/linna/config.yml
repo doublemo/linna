@@ -1,0 +1,6 @@
+endpoint: 
+  id: "linna-1"
+  name: "linna"
+  
+log:
+  level: "DEBUG"

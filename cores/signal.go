@@ -19,28 +19,15 @@
 // FilePath: \linna\cores\signal.go
 // Description: 系统信息处理
 
-//go:build !windows
-// +build !windows
-
 package cores
 
-import (
-	"os"
-	"os/signal"
-	"syscall"
-)
+type SignalCommand int
 
-func NewSignal(ctx context.Context, handle func(command)) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGHUP)
-	go func() {
-		for {
-			select {
-			case sig := <-c:
-				handle(sig)
-			case <-ctx.Done():
-				
-			}
-		}
-	}()
-}
+// 定义信息参数
+const (
+	SignalINT SignalCommand = (iota + 1) << 1
+	SignalTERM
+	SignalUSR1
+	SignalUSR2
+	SignalHUP
+)

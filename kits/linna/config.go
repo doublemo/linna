@@ -21,10 +21,21 @@
 package linna
 
 import (
+	"github.com/doublemo/linna/internal/endpoint"
 	"github.com/doublemo/linna/internal/logger"
 )
 
 // Configuration 配置
 type Configuration struct {
-	Logger logger.Configuration `yaml:"log" json:"log" usage:"日志信息配置"`
+	SourceFile string                 `yaml:"-" json:"config" usage:"配置文件地址"`
+	Endpoint   endpoint.Configuration `yaml:"endpoint" json:"endpoint" usage:"节点信息"`
+	Logger     logger.Configuration   `yaml:"log" json:"log" usage:"日志信息配置"`
+}
+
+func (c Configuration) Check() error {
+	return nil
+}
+
+func NewConfiguration() Configuration {
+	return Configuration{}
 }
