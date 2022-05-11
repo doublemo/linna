@@ -20,12 +20,63 @@
 // Description:
 package linna
 
-// description: 
-//
-// param {string} data
-// return {*}
+import (
+	"flag"
+	"fmt"
+	"os"
+)
 
-func MybeCall(data string) (err error) {
-	//
+// ParseArgs 参数解析
+func ParseArgs(v, commitid, buildAt string) string {
+	if len(os.Args) < 1 {
+		return ""
+	}
+
+	var (
+		// fp 配置文件地址
+		fp string
+
+		// showVersion 显示版本信息
+		showVersion bool
+
+		// showHelp 显示配置信息
+		showHelp bool
+	)
+
+	fs := flag.NewFlagSet("linna", flag.ExitOnError)
+	fs.Usage = usage
+	fs.BoolVar(&showVersion, "version", false, "Print version information")
+	fs.BoolVar(&showVersion, "v", false, "Print version information")
+	fs.StringVar(&fp, "c", "", "Configuration file")
+	fs.StringVar(&fp, "config", "", "Configuration file")
+	fs.BoolVar(&showHelp, "h", false, "Show help message.")
+	fs.BoolVar(&showHelp, "help", false, "Show help message.")
+	fs.Parse(os.Args[1:])
+	if showHelp {
+		usage()
+	}
+
+	if showVersion {
+		fmt.Printf("%s + %s + %s\n", v, commitid, buildAt)
+		os.Exit(0)
+	}
+
+	return fp
+}
+
+var usageStr = `
+Usage: linna [options]
+    -c, --config                     Configuration file
+    -h, --help                       Show help message
+    -v, --version                    Show version
+`
+
+func usage() {
+	fmt.Printf("%s\n", usageStr)
+	os.Exit(0)
+}
+
+// Serve 开启linna服务
+func Serve() error {
 	return nil
 }
