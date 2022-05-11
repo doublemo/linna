@@ -13,34 +13,13 @@
 // limitations under the License.
 //
 // Author: randyma 435420057@qq.com
-// Date: 2022-05-11 18:13:45
+// Date: 2022-05-11 18:40:44
 // LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 18:13:53
-// FilePath: \linna\cores\signal.go
+// LastEditTime: 2022-05-11 18:42:34
+// FilePath: \linna\cores\signal_windows.go
 // Description: 系统信息处理
 
-//go:build !windows
-// +build !windows
+//go:build windows
+// +build windows
 
 package cores
-
-import (
-	"os"
-	"os/signal"
-	"syscall"
-)
-
-func NewSignal(ctx context.Context, handle func(command)) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGHUP)
-	go func() {
-		for {
-			select {
-			case sig := <-c:
-				handle(sig)
-			case <-ctx.Done():
-				
-			}
-		}
-	}()
-}
