@@ -33,8 +33,63 @@ import (
 	"go.uber.org/zap"
 )
 
+// RuntimeGoInitializer go插件初始化容器
+type RuntimeGoInitializer struct {
+	logger runtime.Logger
+	db     *sql.DB
+	env    map[string]string
+	na     runtime.LinnaModule
+}
+
+func (ri *RuntimeGoInitializer) RegisterEvent()             {}
+func (ri *RuntimeGoInitializer) RegisterEventSessionStart() {}
+func (ri *RuntimeGoInitializer) RegisterEventSessionEnd()   {}
+func (ri *RuntimeGoInitializer) RegisterRPC()               {}
+
+type RuntimeProviderGoOptions struct {
+	logger        *zap.Logger
+	startupLogger *zap.Logger
+	config        Configuration
+	paths         []string
+	rootPath      string
+	queue         *RuntimeEventQueue
+	db            *sql.DB
+}
+
 //  NewRuntimeProviderGo 创建Go
-func NewRuntimeProviderGo(ctx context.Context) {}
+func NewRuntimeProviderGo(ctx context.Context, option *RuntimeProviderGoOptions) ([]string, *RuntimeGoInitializer, error) {
+	runtimeLogger := NewRuntimeGoLogger(option.logger)
+	// node := config.Endpoint.Name
+	// env := config.Runtime.Environment
+	// na :=
+
+	initializer := &RuntimeGoInitializer{
+		logger: runtimeLogger,
+		db:     option.db,
+	}
+
+	modules := make([]string, 0)
+	for _, path := range option.paths {
+		if strings.ToLower(filepath.Ext(path)) != ".so" {
+			continue
+		}
+
+		relPath, name, fn, err := openGoModule(option.startupLogger, option.rootPath, path)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if err := fn(ctx, runtimeLogger, option.db, nil, nil); err != nil {
+			option.startupLogger.Fatal("Error returned by InitModule function in Go module", zap.String("name", name), zap.Error(err))
+			return nil, nil, err
+		}
+
+		modules = append(modules, relPath)
+	}
+
+	option.startupLogger.Info("Go runtime modules loaded")
+	return modules, initializer, nil
+}
 
 // CheckRuntimeProviderGo 检查Go插件
 func CheckRuntimeProviderGo(logger *zap.Logger, rootPath string, paths []string) error {
