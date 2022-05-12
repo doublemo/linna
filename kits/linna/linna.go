@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
-// Date: 2022-05-09 09:53:57
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-09 10:58:47
-// FilePath: \linna\kits\linna\linna.go
-// Description:
+// Author: randyma
+// Date: 2022-05-12 09:58:12
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:40:46
+// Description: Linna启动程序处理
+
 package linna
 
 import (
@@ -35,6 +35,7 @@ Usage: linna [options]
     -c, --config                     配置文件地址
     -h, --help                       显示帮助信息
     -v, --version                    显示版本信息
+	--data_dir                       设置Linna数据存储地址
 `
 
 // ParseArgs 参数解析
@@ -52,6 +53,8 @@ func ParseArgs(log *zap.Logger, v, commitid, buildAt string) Configuration {
 
 		// showHelp 显示配置信息
 		showHelp bool
+
+		datadir string
 	)
 
 	fs := flag.NewFlagSet("linna", flag.ExitOnError)
@@ -62,6 +65,7 @@ func ParseArgs(log *zap.Logger, v, commitid, buildAt string) Configuration {
 	fs.StringVar(&fp, "config", "", "配置文件地址")
 	fs.BoolVar(&showHelp, "h", false, "显示帮助信息")
 	fs.BoolVar(&showHelp, "help", false, "显示帮助信息")
+	fs.StringVar(&datadir, "data_dir", "", "设置Linna数据存储地址")
 	fs.Parse(os.Args[1:])
 	if showHelp {
 		usage()
@@ -99,6 +103,9 @@ func ParseArgs(log *zap.Logger, v, commitid, buildAt string) Configuration {
 	}
 
 	config.SourceFile = fp
+	if len(datadir) != 0 {
+		config.Datadir = datadir
+	}
 	return config
 }
 

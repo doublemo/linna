@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
-// Date: 2022-05-11 18:13:45
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 18:13:53
-// FilePath: \linna\cores\signal.go
-// Description: 系统信息处理
+// Author: randyma
+// Date: 2022-05-12 09:58:12
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:35:19
+// Description: 系统信号处理
 
 package cores
 

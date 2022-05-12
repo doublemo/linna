@@ -12,14 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
+// Author: randyma
 // Date: 2022-05-11 18:40:44
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 18:42:34
-// FilePath: \linna\cores\signal_windows.go
-// Description: 系统信息处理
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:34:01
+// Description:
 
 //go:build windows
 // +build windows
 
 package cores
+
+import (
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+// Signal 处理系统信号
+func Signal(ctx context.Context, handle func(SignalCommand)) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	for {
+		select {
+		case <-c:
+			handle(SignalINT)
+
+		case <-ctx.Done():
+			return
+		}
+	}
+}

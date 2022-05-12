@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
+// Author: randyma
 // Date: 2022-05-11 10:19:18
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 10:19:20
-// FilePath: \linna\internal\logger\logger.go
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:38:57
 // Description: 日志处理与声明 Reference: https://github.com/heroiclabs/nakama
 
 package logger

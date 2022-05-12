@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
+// Author: randyma
 // Date: 2022-05-11 18:01:10
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 18:01:15
-// FilePath: \linna\internal\metrics\metrics.go
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:38:17
 // Description: 日志收集
 
 package metrics

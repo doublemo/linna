@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
+// Author: randyma
 // Date: 2022-05-11 17:51:29
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 17:51:38
-// FilePath: \linna\migrate\migrate.go
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:41:35
 // Description: 数据库迁移
 
 package migrate

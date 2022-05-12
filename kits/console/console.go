@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
+// Author: randyma
 // Date: 2022-05-09 09:49:47
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-09 13:58:11
-// FilePath: \linna\kits\console\console.go
-// Description:
-//
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:40:01
+// Description: 控制台处理
 
 package console

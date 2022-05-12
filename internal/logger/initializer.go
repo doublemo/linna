@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
+// Author: randyma
 // Date: 2022-05-11 13:04:16
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 13:04:25
-// FilePath: \linna\internal\logger\instance.go
-// Description:初始化默认日志输出
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:37:16
+// Description: 日志初始程序
+
 package logger
 
 import (
@@ -43,6 +43,24 @@ func Logger() (*zap.Logger, *zap.Logger) {
 	}
 
 	return defaultConsoleLogger, defaultFileLogger
+}
+
+// ConsoleLogger 控制台输出
+func ConsoleLogger() *zap.Logger {
+	if defaultConsoleLogger == nil {
+		defaultConsoleLogger = NewJSONLogger(os.Stdout, zapcore.InfoLevel, JSONFormat)
+	}
+
+	return defaultConsoleLogger
+}
+
+// ConsoleLogger 控制台输出
+func StartupLogger() *zap.Logger {
+	if defaultFileLogger == nil {
+		defaultFileLogger = NewJSONLogger(os.Stdout, zapcore.InfoLevel, JSONFormat)
+	}
+
+	return defaultFileLogger
 }
 
 // Initializer 初始化日志

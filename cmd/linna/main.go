@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
-// Date: 2022-05-11 15:36:25
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 15:36:33
-// FilePath: \linna\cmd\linna\main.go
-// Description:
+// Author: randyma
+// Date: 2022-05-12 09:58:12
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:39:46
+// Description: Linna 主入口文件
 
 package main
 
@@ -25,15 +24,16 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"math/rand"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/doublemo/linna/cores"
 	"github.com/doublemo/linna/internal/logger"
 	"github.com/doublemo/linna/kits/linna"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // 定义版本信息
@@ -62,6 +62,16 @@ func main() {
 	log, startupLogger = logger.New(log, config.Logger)
 	logger.Initializer(log, startupLogger)
 	startupLogger.Info("Linna starting")
+	programInfo := []zapcore.Field{
+		zap.String("id", config.Endpoint.ID),
+		zap.String("name", config.Endpoint.Name),
+		zap.String("version", version),
+		zap.String("runtime", runtime.Version()),
+		zap.Int("cpu", runtime.NumCPU()),
+		zap.Int("proc", runtime.GOMAXPROCS(0)),
+	}
+	startupLogger.Info("Node", programInfo...)
+	startupLogger.Info("Data directory", zap.String("path", config.Datadir))
 
 	// 随机种子
 	var seed int64

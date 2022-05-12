@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: randyma 435420057@qq.com
+// Author: randyma
 // Date: 2022-05-09 09:56:47
-// LastEditors: randyma 435420057@qq.com
-// LastEditTime: 2022-05-11 09:57:36
-// FilePath: \linna\kits\linna\runtime_go_linna.go
+// LastEditors: randyma
+// LastEditTime: 2022-05-12 10:41:16
 // Description:
+// Reference: https://github.com/heroiclabs/nakama
+
 package linna
