@@ -17,6 +17,5 @@
 // LastEditors: randyma
 // LastEditTime: 2022-05-12 10:41:12
 // Description:
-// Reference: https://github.com/heroiclabs/nakama
 
 package linna

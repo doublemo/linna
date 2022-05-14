@@ -17,7 +17,6 @@
 // LastEditors: randyma
 // LastEditTime: 2022-05-12 10:41:26
 // Description: Nakama运行时实现,代码大部来至nakama,部分代码根据自己的需要修改
-// Reference: https://github.com/heroiclabs/nakama
 
 package linna
 
@@ -80,13 +79,23 @@ func NewRuntimeConfiguration() RuntimeConfiguration {
 }
 
 // RuntimeInfo 运行时信息
-type RuntimeInfo struct{}
+type RuntimeInfo struct {
+	GoRPCFunctions         []string
+	LuaRPCFunction         []string
+	JavascriptRPCFunctions []string
+	GoModules              []*moduleInfo
+	LuaModules             []*moduleInfo
+	JavascriptModules      []*moduleInfo
+}
 
 // RuntimeBeforeReqFunctions 运行时调用方法前
 type RuntimeBeforeReqFunctions struct{}
 
 // RuntimeAfterReqFunctions运行时调用方法后
 type RuntimeAfterReqFunctions struct{}
+
+// RuntimeEventFunctions 运行时事件处理函数
+type RuntimeEventFunctions struct{}
 
 // Runtime 运行时
 type Runtime struct{}

@@ -17,7 +17,6 @@
 // LastEditors: randyma
 // LastEditTime: 2022-05-12 14:58:36
 // Description: 运行时事件队列
-// Reference: https://github.com/heroiclabs/nakama
 
 package linna
 
