@@ -17,7 +17,6 @@
 // LastEditors: randyma
 // LastEditTime: 2022-05-12 18:07:16
 // Description:
-// Reference: https://github.com/heroiclabs/nakama-common
 
 package runtime
 
@@ -25,6 +24,30 @@ import (
 	"context"
 	"database/sql"
 )
+
+type RuntimeContextValueKT string
+
+func (k RuntimeContextValueKT) String() string {
+	return string(k)
+}
+
+const (
+	RUNTIME_CTX_ENV              RuntimeContextValueKT = "env"              // 环境变量Key
+	RUNTIME_CTX_MODE             RuntimeContextValueKT = "execution_mode"   // 运行时模式
+	RUNTIME_CTX_NODE             RuntimeContextValueKT = "node"             // 节点名称
+	RUNTIME_CTX_HEADERS          RuntimeContextValueKT = "headers"          // HTTP头
+	RUNTIME_CTX_QUERY_PARAMS     RuntimeContextValueKT = "query_params"     // HTTP query
+	RUNTIME_CTX_USER_ID          RuntimeContextValueKT = "user_id"          // 用户ID
+	RUNTIME_CTX_USERNAME         RuntimeContextValueKT = "username"         // 用户名称
+	RUNTIME_CTX_VARS             RuntimeContextValueKT = "vars"             // 变量存储
+	RUNTIME_CTX_USER_SESSION_EXP RuntimeContextValueKT = "user_session_exp" // 用户会话过期时间
+	RUNTIME_CTX_SESSION_ID       RuntimeContextValueKT = "session_id"       // 用户会话ID
+	RUNTIME_CTX_LANG             RuntimeContextValueKT = "lang"             // 用户语言
+	RUNTIME_CTX_CLIENT_IP        RuntimeContextValueKT = "client_ip"        // 客户端IP
+	RUNTIME_CTX_CLIENT_PORT      RuntimeContextValueKT = "client_port"      // 客户端端口
+)
+
+type RuntimeRPCFunction func(ctx context.Context, logger Logger, db *sql.DB, m LinnaModule, payload string) (string, error)
 
 // Logger公开了一个日志框架以在模块中使用。它公开了特定于级别的日志函数和一组通用函数，以实现兼容性
 type Logger interface {
@@ -56,20 +79,10 @@ type Logger interface {
 //
 // 注意：您不能缓存对它的引用，并在以后再次使用它，因为这可能会产生意外的副作用
 type Initializer interface {
-	RegisterRpc(id string, fn func(ctx context.Context, logger Logger, db *sql.DB, m LinnaModule, payload string) (string, error)) error
+	RegisterRpc(id string, fn RuntimeRPCFunction) error
 }
 
 // LinnaModule 模块功能接口
 type LinnaModule interface {
-	AuthenticateApple(ctx context.Context, token, username string, create bool) (string, string, bool, error)
-	AuthenticateCustom(ctx context.Context, id, username string, create bool) (string, string, bool, error)
-	AuthenticateDevice(ctx context.Context, id, username string, create bool) (string, string, bool, error)
-	AuthenticateEmail(ctx context.Context, email, password, username string, create bool) (string, string, bool, error)
-	AuthenticateFacebook(ctx context.Context, token string, importFriends bool, username string, create bool) (string, string, bool, error)
-	AuthenticateFacebookInstantGame(ctx context.Context, signedPlayerInfo string, username string, create bool) (string, string, bool, error)
-	AuthenticateGameCenter(ctx context.Context, playerID, bundleID string, timestamp int64, salt, signature, publicKeyUrl, username string, create bool) (string, string, bool, error)
-	AuthenticateGoogle(ctx context.Context, token, username string, create bool) (string, string, bool, error)
-	AuthenticateSteam(ctx context.Context, token, username string, create bool) (string, string, bool, error)
-
-	AuthenticateTokenGenerate(userID, username string, exp int64, vars map[string]string) (string, int64, error)
+	Authenticate(ctx context.Context, token, username string, create bool) (string, string, bool, error)
 }
