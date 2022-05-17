@@ -110,6 +110,18 @@ type RuntimeJavascriptRequest struct {
 	Payloads    []interface{}
 }
 
+// RuntimeProviderJSOptions Javascript运行时
+type RuntimeProviderJSOptions struct {
+	Logger               *zap.Logger
+	StartupLogger        *zap.Logger
+	DB                   *sql.DB
+	ProtojsonMarshaler   *protojson.MarshalOptions
+	ProtojsonUnmarshaler *protojson.UnmarshalOptions
+	Config               Configuration
+	Path                 string
+	Entrypoint           string
+}
+
 type RuntimeProviderJS struct {
 	logger               *zap.Logger
 	db                   *sql.DB
@@ -282,4 +294,8 @@ func (rp *RuntimeProviderJS) Put(r *RuntimeJS) {
 		// Safe to continue processing, the runtime is just discarded.
 		rp.logger.Warn("JavaScript runtime pool full, discarding runtime")
 	}
+}
+
+func NewRuntimeProviderJS(option *RuntimeProviderJSOptions) *RuntimeProviderJS {
+	return &RuntimeProviderJS{}
 }
