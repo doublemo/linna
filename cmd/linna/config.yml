@@ -4,3 +4,8 @@ endpoint:
   
 log:
   level: "DEBUG"
+
+data_dir: "./data"
+
+runtime: 
+  path: "./data/modules"

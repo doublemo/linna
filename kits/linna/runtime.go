@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Linna Authors.
+// Copyright (c) 2021 The Nakama Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ package linna
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,6 +30,41 @@ import (
 
 	"github.com/doublemo/linna/internal/logger"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+)
+
+var (
+	ErrRuntimeRPCNotFound = errors.New("RPC function not found")
+)
+
+type RuntimeExecutionMode int
+
+const (
+	RuntimeExecutionModeEvent RuntimeExecutionMode = iota
+	RuntimeExecutionModeRunOnce
+	RuntimeExecutionModeRPC
+	RuntimeExecutionModeBefore
+	RuntimeExecutionModeAfter
+)
+
+func (mode RuntimeExecutionMode) String() string {
+	switch mode {
+	case RuntimeExecutionModeEvent:
+		return "event"
+	case RuntimeExecutionModeRunOnce:
+		return "run_once"
+	case RuntimeExecutionModeRPC:
+		return "rpc"
+	case RuntimeExecutionModeBefore:
+		return "before"
+	case RuntimeExecutionModeAfter:
+		return "after"
+	}
+	return ""
+}
+
+type (
+	RuntimeRpcFunction func(ctx context.Context, headers, queryParams map[string][]string, userID, username string, vars map[string]string, expiry int64, sessionID, clientIP, clientPort, lang, payload string) (string, error, codes.Code)
 )
 
 // RuntimeConfiguration 定义运行时配置
@@ -119,8 +155,23 @@ func NewRuntime(ctx context.Context, config Configuration) (*Runtime, *RuntimeIn
 	eventQueue := NewRuntimeEventQueue(log, config)
 	startupLogger.Info("Runtime event queue processor started", zap.Int("size", config.Runtime.EventQueueSize), zap.Int("workers", config.Runtime.EventQueueWorkers))
 
-	fmt.Println(paths, eventQueue)
-	return nil, nil, nil
+	// go plush
+	goModules, goInitializer, err := NewRuntimeProviderGo(ctx, &RuntimeProviderGoOptions{
+		Logger:        log,
+		StartupLogger: startupLogger,
+		Config:        config,
+		Paths:         paths,
+		RootPath:      config.Runtime.Path,
+		Queue:         eventQueue,
+		DB:            nil,
+	})
+
+	fmt.Println(goModules, goInitializer, eventQueue, err)
+	allModules := make([]string, len(goModules))
+	copy(allModules[0:], goModules[0:])
+
+	startupLogger.Info("Found runtime modules", zap.Int("count", len(allModules)), zap.Strings("modules", allModules))
+	return &Runtime{}, nil, nil
 }
 
 func GetRuntimePaths(logger *zap.Logger, rootPath string) ([]string, error) {

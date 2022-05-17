@@ -21,6 +21,7 @@
 package linna
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -116,7 +117,8 @@ func usage() {
 
 // Serve 开启linna服务
 func Serve(config Configuration) error {
-
+	runtime, _, err := NewRuntime(context.Background(), config)
+	fmt.Println(runtime, err)
 	return nil
 }
 

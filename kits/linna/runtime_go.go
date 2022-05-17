@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Linna Authors.
+// Copyright (c) 2021 The Nakama Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import (
 
 	"github.com/doublemo/linna-common/runtime"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // RuntimeGoInitializer go插件初始化容器
@@ -37,56 +38,74 @@ type RuntimeGoInitializer struct {
 	logger runtime.Logger
 	db     *sql.DB
 	env    map[string]string
+	node   string
 	na     runtime.LinnaModule
+	rpc    map[string]runtime.RuntimeRPCFunction
 }
 
-func (ri *RuntimeGoInitializer) RegisterEvent()             {}
-func (ri *RuntimeGoInitializer) RegisterEventSessionStart() {}
-func (ri *RuntimeGoInitializer) RegisterEventSessionEnd()   {}
-func (ri *RuntimeGoInitializer) RegisterRPC()               {}
+func (ri *RuntimeGoInitializer) RegisterRpc(id string, fn runtime.RuntimeRPCFunction) error {
+	return nil
+}
 
 type RuntimeProviderGoOptions struct {
-	logger        *zap.Logger
-	startupLogger *zap.Logger
-	config        Configuration
-	paths         []string
-	rootPath      string
-	queue         *RuntimeEventQueue
-	db            *sql.DB
+	Logger        *zap.Logger
+	StartupLogger *zap.Logger
+	Config        Configuration
+	Paths         []string
+	RootPath      string
+	Queue         *RuntimeEventQueue
+	DB            *sql.DB
 }
 
 //  NewRuntimeProviderGo 创建Go
 func NewRuntimeProviderGo(ctx context.Context, option *RuntimeProviderGoOptions) ([]string, *RuntimeGoInitializer, error) {
-	runtimeLogger := NewRuntimeGoLogger(option.logger)
-	// node := config.Endpoint.Name
-	// env := config.Runtime.Environment
-	// na :=
+	runtimeLogger := NewRuntimeGoLogger(option.Logger)
+	startupLogger := option.StartupLogger
+	config := option.Config
+	node := config.Endpoint.Name
+	env := config.Runtime.Environment
+	na := NewRuntimeGoLinnaModule(&RuntimeGoLinnaModuleOptions{
+		Logger: option.StartupLogger,
+		DB:     option.DB,
+		ProtojsonMarshaler: &protojson.MarshalOptions{
+			UseEnumNumbers:  true,
+			EmitUnpopulated: false,
+			Indent:          "",
+			UseProtoNames:   true,
+		},
+		Config: option.Config,
+		Node:   node,
+	})
 
 	initializer := &RuntimeGoInitializer{
 		logger: runtimeLogger,
-		db:     option.db,
+		db:     option.DB,
+		env:    env,
+		node:   node,
 	}
 
+	ctx = NewRuntimeGoContext(ctx, RuntimeExecutionModeRunOnce, NewRuntimeGoContextOptions())
+	startupLogger.Info("Initialising Go runtime provider", zap.String("path", option.RootPath))
+
 	modules := make([]string, 0)
-	for _, path := range option.paths {
+	for _, path := range option.Paths {
 		if strings.ToLower(filepath.Ext(path)) != ".so" {
 			continue
 		}
 
-		relPath, name, fn, err := openGoModule(option.startupLogger, option.rootPath, path)
+		relPath, name, fn, err := openGoModule(startupLogger, option.RootPath, path)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if err := fn(ctx, runtimeLogger, option.db, nil, nil); err != nil {
-			option.startupLogger.Fatal("Error returned by InitModule function in Go module", zap.String("name", name), zap.Error(err))
+		if err := fn(ctx, runtimeLogger, option.DB, na, initializer); err != nil {
+			startupLogger.Fatal("Error returned by InitModule function in Go module", zap.String("name", name), zap.Error(err))
 			return nil, nil, err
 		}
 
 		modules = append(modules, relPath)
 	}
-
-	option.startupLogger.Info("Go runtime modules loaded")
+	startupLogger.Info("Go runtime modules loaded")
 	return modules, initializer, nil
 }
 

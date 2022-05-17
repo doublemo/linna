@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Linna Authors.
+// Copyright (c) 2021 The Nakama Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,3 +19,47 @@
 // Description:
 
 package linna
+
+import (
+	"context"
+	"database/sql"
+	"sync"
+
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/encoding/protojson"
+)
+
+// RuntimeGoLinnaModuleOptions 运行时间创建module参数
+type RuntimeGoLinnaModuleOptions struct {
+	Logger             *zap.Logger
+	DB                 *sql.DB
+	ProtojsonMarshaler *protojson.MarshalOptions
+	Config             Configuration
+	Node               string
+}
+
+// RuntimeGoLinnaModule 运行Linna模块
+type RuntimeGoLinnaModule struct {
+	sync.RWMutex
+	logger             *zap.Logger
+	db                 *sql.DB
+	protojsonMarshaler *protojson.MarshalOptions
+	config             Configuration
+
+	//eventFn RuntimeEventCustomFunction
+	node string
+}
+
+func NewRuntimeGoLinnaModule(option *RuntimeGoLinnaModuleOptions) *RuntimeGoLinnaModule {
+	return &RuntimeGoLinnaModule{
+		logger:             option.Logger,
+		db:                 option.DB,
+		protojsonMarshaler: option.ProtojsonMarshaler,
+		config:             option.Config,
+		node:               option.Node,
+	}
+}
+
+func (n *RuntimeGoLinnaModule) Authenticate(ctx context.Context, token, username string, create bool) (string, string, bool, error) {
+	return "", "", false, nil
+}
