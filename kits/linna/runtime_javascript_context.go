@@ -35,7 +35,7 @@ type RuntimeJSContextOptions struct {
 	QueryParams   map[string][]string // 参数
 	SeessionID    string              // 会话ID
 	SessionExpiry int64               // 会话过期时间
-	UserID        string              // 用户ID
+	UserID        uint64              // 用户ID
 	Username      string              // 用户
 	Vars          map[string]string   //
 	ClientIP      string              // 客户IP
@@ -66,10 +66,7 @@ func NewRuntimeJsContext(r *goja.Runtime, mode RuntimeExecutionMode, option *Run
 		ctxObj.Set(runtime.RUNTIME_CTX_USER_SESSION_EXP.String(), option.SessionExpiry)
 	}
 
-	if option.UserID != "" {
-		ctxObj.Set(runtime.RUNTIME_CTX_USER_ID.String(), option.UserID)
-	}
-
+	ctxObj.Set(runtime.RUNTIME_CTX_USER_ID.String(), option.UserID)
 	if option.SeessionID != "" {
 		ctxObj.Set(runtime.RUNTIME_CTX_SESSION_ID.String(), option.SeessionID)
 		ctxObj.Set(runtime.RUNTIME_CTX_LANG.String(), option.Lang)

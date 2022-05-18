@@ -30,7 +30,7 @@ import (
 
 	"github.com/doublemo/linna/internal/logger"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 var (
@@ -62,10 +62,6 @@ func (mode RuntimeExecutionMode) String() string {
 	}
 	return ""
 }
-
-type (
-	RuntimeRpcFunction func(ctx context.Context, headers, queryParams map[string][]string, userID, username string, vars map[string]string, expiry int64, sessionID, clientIP, clientPort, lang, payload string) (string, error, codes.Code)
-)
 
 // RuntimeConfiguration 定义运行时配置
 type RuntimeConfiguration struct {
@@ -124,15 +120,6 @@ type RuntimeInfo struct {
 	JavascriptModules      []*moduleInfo
 }
 
-// RuntimeBeforeReqFunctions 运行时调用方法前
-type RuntimeBeforeReqFunctions struct{}
-
-// RuntimeAfterReqFunctions运行时调用方法后
-type RuntimeAfterReqFunctions struct{}
-
-// RuntimeEventFunctions 运行时事件处理函数
-type RuntimeEventFunctions struct{}
-
 // Runtime 运行时
 type Runtime struct{}
 
@@ -155,7 +142,7 @@ func NewRuntime(ctx context.Context, config Configuration) (*Runtime, *RuntimeIn
 	eventQueue := NewRuntimeEventQueue(log, config)
 	startupLogger.Info("Runtime event queue processor started", zap.Int("size", config.Runtime.EventQueueSize), zap.Int("workers", config.Runtime.EventQueueWorkers))
 
-	// go plush
+	// go
 	goModules, goInitializer, err := NewRuntimeProviderGo(ctx, &RuntimeProviderGoOptions{
 		Logger:        log,
 		StartupLogger: startupLogger,
@@ -166,9 +153,30 @@ func NewRuntime(ctx context.Context, config Configuration) (*Runtime, *RuntimeIn
 		DB:            nil,
 	})
 
+	// javascript
+	jsProvider, err := NewRuntimeProviderJS(&RuntimeProviderJSOptions{
+		Logger:        log,
+		StartupLogger: startupLogger,
+		Config:        config,
+		DB:            nil,
+		ProtojsonMarshaler: &protojson.MarshalOptions{
+			UseEnumNumbers:  true,
+			EmitUnpopulated: false,
+			Indent:          "",
+			UseProtoNames:   true,
+		},
+		ProtojsonUnmarshaler: &protojson.UnmarshalOptions{
+			DiscardUnknown: false,
+		},
+		Path:       config.Runtime.Path,
+		Entrypoint: config.Runtime.JsEntrypoint,
+	})
+
 	fmt.Println(goModules, goInitializer, eventQueue, err)
-	allModules := make([]string, len(goModules))
+	jsModules := jsProvider.Modules()
+	allModules := make([]string, len(goModules)+len(jsModules))
 	copy(allModules[0:], goModules[0:])
+	copy(allModules[len(goModules):], jsModules[0:])
 
 	startupLogger.Info("Found runtime modules", zap.Int("count", len(allModules)), zap.Strings("modules", allModules))
 	return &Runtime{}, nil, nil

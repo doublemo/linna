@@ -79,7 +79,7 @@ type Logger interface {
 //
 // 注意：您不能缓存对它的引用，并在以后再次使用它，因为这可能会产生意外的副作用
 type Initializer interface {
-	RegisterRpc(id string, fn RuntimeRPCFunction) error
+	RegisterRpc(id string, fn func(ctx context.Context, logger Logger, db *sql.DB, m LinnaModule, payload string) (string, error)) error
 }
 
 // LinnaModule 模块功能接口

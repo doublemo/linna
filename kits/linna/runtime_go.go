@@ -43,7 +43,7 @@ type RuntimeGoInitializer struct {
 	rpc    map[string]runtime.RuntimeRPCFunction
 }
 
-func (ri *RuntimeGoInitializer) RegisterRpc(id string, fn runtime.RuntimeRPCFunction) error {
+func (ri *RuntimeGoInitializer) RegisterRpc(id string, fn func(ctx context.Context, logger runtime.Logger, db *sql.DB, na runtime.LinnaModule, payload string) (string, error)) error {
 	return nil
 }
 

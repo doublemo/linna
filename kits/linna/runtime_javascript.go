@@ -24,6 +24,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/dop251/goja"
@@ -33,6 +36,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 )
+
+const JavascriptEntrypointFilename = "index.js"
 
 type RuntimeJS struct {
 	logger       *zap.Logger
@@ -47,7 +52,7 @@ type RuntimeJS struct {
 func (r *RuntimeJS) GetCallback(mode RuntimeExecutionMode, key string) string {
 	switch mode {
 	case RuntimeExecutionModeRPC:
-		return r.callbacks.RPC[key]
+		return r.callbacks.Rpc[key]
 	case RuntimeExecutionModeBefore:
 		return r.callbacks.Before[key]
 	case RuntimeExecutionModeAfter:
@@ -94,22 +99,6 @@ func (mc *RuntimeJSModuleCache) Add(m *RuntimeJSModule) {
 	sort.Strings(mc.Names)
 }
 
-// RuntimeJavascriptRequest 请求
-type RuntimeJavascriptRequest struct {
-	ID          string
-	Headers     map[string][]string
-	QueryParams map[string][]string
-	UserID      string
-	Username    string
-	Vars        map[string]string
-	Expiry      int64
-	SessionID   string
-	ClientIP    string
-	ClientPort  string
-	Lang        string
-	Payloads    []interface{}
-}
-
 // RuntimeProviderJSOptions Javascript运行时
 type RuntimeProviderJSOptions struct {
 	Logger               *zap.Logger
@@ -132,14 +121,24 @@ type RuntimeProviderJS struct {
 	maxCount             uint32
 	currentCount         *atomic.Uint32
 	newFn                func() *RuntimeJS
+	execution            *RuntimeExecution
+	modules              []string
 }
 
-func (rp *RuntimeProviderJS) RPC(ctx context.Context, req *RuntimeJavascriptRequest) (string, error, codes.Code) {
+func (rp *RuntimeProviderJS) Execution() *RuntimeExecution {
+	return rp.execution
+}
+
+func (rp *RuntimeProviderJS) Modules() []string {
+	return rp.modules
+}
+
+func (rp *RuntimeProviderJS) Rpc(ctx context.Context, id string, same *RuntimeSameRequest, payload string) (string, error, codes.Code) {
 	r, err := rp.Get(ctx)
 	if err != nil {
 		return "", err, codes.Internal
 	}
-	jsFn := r.GetCallback(RuntimeExecutionModeRPC, req.ID)
+	jsFn := r.GetCallback(RuntimeExecutionModeRPC, id)
 	if jsFn == "" {
 		rp.Put(r)
 		return "", ErrRuntimeRPCNotFound, codes.NotFound
@@ -151,12 +150,12 @@ func (rp *RuntimeProviderJS) RPC(ctx context.Context, req *RuntimeJavascriptRequ
 		return "", errors.New("Could not run Rpc function."), codes.Internal
 	}
 
-	jsLogger, err := NewJSLogger(r.vm, r.logger, zap.String("rpc_id", req.ID))
+	jsLogger, err := NewJSLogger(r.vm, r.logger, zap.String("rpc_id", id))
 	if err != nil {
 		r.logger.Error("Could not instantiate js logger.", zap.Error(err))
 		return "", errors.New("Could not run Rpc function."), codes.Internal
 	}
-	retValue, err, code := r.InvokeFunction(RuntimeExecutionModeRPC, fn, jsLogger, req)
+	retValue, err, code := r.InvokeFunction(RuntimeExecutionModeRPC, fn, jsLogger, id, same, payload)
 	rp.Put(r)
 	if err != nil {
 		return "", err, code
@@ -166,40 +165,47 @@ func (rp *RuntimeProviderJS) RPC(ctx context.Context, req *RuntimeJavascriptRequ
 		return "", nil, 0
 	}
 
-	payload, ok := retValue.(string)
+	payload, ok = retValue.(string)
 	if !ok {
 		msg := "Runtime function returned invalid data - only allowed one return value of type string."
-		rp.logger.Error(msg, zap.String("mode", RuntimeExecutionModeRPC.String()), zap.String("id", req.ID))
+		rp.logger.Error(msg, zap.String("mode", RuntimeExecutionModeRPC.String()), zap.String("id", id))
 		return "", errors.New(msg), codes.Internal
 	}
 
 	return payload, nil, code
 }
 
-func (r *RuntimeJS) InvokeFunction(execMode RuntimeExecutionMode, fn goja.Callable, logger goja.Value, req *RuntimeJavascriptRequest) (interface{}, error, codes.Code) {
+func (r *RuntimeProviderJS) BeforeRt(ctx context.Context, id string, same *RuntimeSameRequest) {}
+func (r *RuntimeProviderJS) AfterRt(ctx context.Context, id string, same *RuntimeSameRequest)  {}
+func (r *RuntimeProviderJS) BeforeReq(ctx context.Context, id string, same *RuntimeSameRequest, req interface{}) {
+}
+func (r *RuntimeProviderJS) AfterReq(ctx context.Context, same *RuntimeSameRequest, res, req interface{}) {
+}
+
+func (r *RuntimeJS) InvokeFunction(execMode RuntimeExecutionMode, fn goja.Callable, logger goja.Value, id string, same *RuntimeSameRequest, payloads ...interface{}) (interface{}, error, codes.Code) {
 	ctx := NewRuntimeJsContext(r.vm, execMode, &RuntimeJSContextOptions{
 		Node:          r.node,
 		Env:           r.env,
-		Headers:       req.Headers,
-		QueryParams:   req.QueryParams,
-		SeessionID:    req.SessionID,
-		SessionExpiry: req.Expiry,
-		UserID:        req.UserID,
-		Username:      req.Username,
-		Vars:          req.Vars,
-		ClientIP:      req.ClientIP,
-		ClientPort:    req.ClientPort,
-		Lang:          req.Lang,
+		Headers:       same.Headers,
+		QueryParams:   same.QueryParams,
+		SeessionID:    same.SessionID,
+		SessionExpiry: same.Expiry,
+		UserID:        same.UserID,
+		Username:      same.Username,
+		Vars:          same.Vars,
+		ClientIP:      same.ClientIP,
+		ClientPort:    same.ClientPort,
+		Lang:          same.Lang,
 	})
 
 	args := []goja.Value{ctx, logger, r.nkInst}
-	jsArgs := make([]goja.Value, 0, len(args)+len(req.Payloads))
+	jsArgs := make([]goja.Value, 0, len(args)+len(payloads))
 	jsArgs = append(jsArgs, args...)
-	for _, payload := range req.Payloads {
+	for _, payload := range payloads {
 		jsArgs = append(jsArgs, r.vm.ToValue(payload))
 	}
 
-	retVal, err, code := r.invokeFunction(execMode, req.ID, fn, jsArgs...)
+	retVal, err, code := r.invokeFunction(execMode, id, fn, jsArgs...)
 	if err != nil {
 		return nil, err, code
 	}
@@ -296,6 +302,229 @@ func (rp *RuntimeProviderJS) Put(r *RuntimeJS) {
 	}
 }
 
-func NewRuntimeProviderJS(option *RuntimeProviderJSOptions) *RuntimeProviderJS {
-	return &RuntimeProviderJS{}
+func NewRuntimeProviderJS(option *RuntimeProviderJSOptions) (*RuntimeProviderJS, error) {
+	logger := option.Logger
+	startupLogger := option.StartupLogger
+	config := option.Config
+	runtimeConfig := config.Runtime
+	startupLogger.Info("Initialising JavaScript runtime provider", zap.String("path", option.Path), zap.String("entrypoint", option.Entrypoint))
+
+	modCache, err := cacheJavascriptModules(startupLogger, option.Path, option.Entrypoint)
+	if err != nil {
+		startupLogger.Fatal("Failed to load JavaScript files", zap.Error(err))
+	}
+
+	jsprotojsonMarshaler := &protojson.MarshalOptions{
+		UseProtoNames:   false,
+		UseEnumNumbers:  option.ProtojsonMarshaler.UseEnumNumbers,
+		EmitUnpopulated: option.ProtojsonMarshaler.EmitUnpopulated,
+		Indent:          option.ProtojsonMarshaler.Indent,
+	}
+
+	localCache := NewRuntimeJavascriptLocalCache()
+	runtimeProviderJS := &RuntimeProviderJS{
+		logger:               option.Logger,
+		db:                   option.DB,
+		protojsonMarshaler:   jsprotojsonMarshaler,
+		protojsonUnmarshaler: option.ProtojsonUnmarshaler,
+		config:               config,
+		poolCh:               make(chan *RuntimeJS, runtimeConfig.JsMaxCount),
+		maxCount:             uint32(runtimeConfig.JsMaxCount),
+		currentCount:         atomic.NewUint32(uint32(runtimeConfig.JsMinCount)),
+		execution:            NewRuntimeExecution(),
+		modules:              make([]string, 0),
+	}
+
+	callbacks, err := evalRuntimeModules(runtimeProviderJS, modCache, localCache, RegisterRuntimeExecution(runtimeProviderJS, runtimeProviderJS.execution), false)
+	if err != nil {
+		logger.Error("Failed to eval JavaScript modules.", zap.Error(err))
+		return nil, err
+	}
+
+	runtimeProviderJS.newFn = func() *RuntimeJS {
+		runtime := goja.New()
+		runtime.RunProgram(modCache.Modules[modCache.Names[0]].Program)
+		freezeGlobalObject(option.Config.Runtime, runtime)
+
+		jsLoggerInst, err := NewJSLogger(runtime, logger)
+		if err != nil {
+			logger.Fatal("Failed to initialize JavaScript runtime", zap.Error(err))
+		}
+
+		nakamaModule := NewRuntimeJavascriptLinnaModule(&RuntimeJavascriptLinnaModuleOptions{
+			Logger:               logger,
+			DB:                   option.DB,
+			ProtojsonMarshaler:   jsprotojsonMarshaler,
+			ProtojsonUnmarshaler: option.ProtojsonUnmarshaler,
+			Config:               config,
+			Node:                 config.Endpoint.ID,
+		})
+		nk := runtime.ToValue(nakamaModule.Constructor(runtime))
+		nkInst, err := runtime.New(nk)
+		if err != nil {
+			logger.Fatal("Failed to initialize JavaScript runtime", zap.Error(err))
+		}
+
+		return &RuntimeJS{
+			logger:       logger,
+			jsLoggerInst: jsLoggerInst,
+			nkInst:       nkInst,
+			node:         option.Config.Endpoint.ID,
+			vm:           runtime,
+			env:          runtime.ToValue(runtimeConfig.Environment),
+			callbacks:    callbacks,
+		}
+	}
+
+	startupLogger.Info("JavaScript runtime modules loaded")
+	startupLogger.Info("Allocating minimum JavaScript runtime pool", zap.Int("count", runtimeConfig.JsMinCount))
+	if len(modCache.Names) > 0 {
+		// Only if there are runtime modules to load.
+		for i := 0; i < runtimeConfig.JsMinCount; i++ {
+			runtimeProviderJS.poolCh <- runtimeProviderJS.newFn()
+		}
+		//runtimeProviderJS.metrics.GaugeJsRuntimes(float64(config.GetRuntime().JsMinCount))
+	}
+	startupLogger.Info("Allocated minimum JavaScript runtime pool")
+	runtimeProviderJS.modules = modCache.Names
+	return runtimeProviderJS, nil
+}
+
+func cacheJavascriptModules(logger *zap.Logger, path, entrypoint string) (*RuntimeJSModuleCache, error) {
+	moduleCache := &RuntimeJSModuleCache{
+		Names:   make([]string, 0),
+		Modules: make(map[string]*RuntimeJSModule),
+	}
+
+	var absEntrypoint string
+	if entrypoint == "" {
+		// If entrypoint is not set, look for index.js file in path; skip if not found.
+		absEntrypoint = filepath.Join(path, JavascriptEntrypointFilename)
+		if _, err := os.Stat(absEntrypoint); os.IsNotExist(err) {
+			return moduleCache, nil
+		}
+	} else {
+		absEntrypoint = filepath.Join(path, entrypoint)
+	}
+
+	var content []byte
+	var err error
+	if content, err = ioutil.ReadFile(absEntrypoint); err != nil {
+		logger.Error("Could not read JavaScript module", zap.String("entrypoint", absEntrypoint), zap.Error(err))
+		return nil, err
+	}
+
+	var modName string
+	if entrypoint == "" {
+		modName = filepath.Base(JavascriptEntrypointFilename)
+	} else {
+		modName = filepath.Base(entrypoint)
+	}
+	ast, _ := goja.Parse(modName, string(content))
+	prg, err := goja.Compile(modName, string(content), true)
+	if err != nil {
+		logger.Error("Could not compile JavaScript module", zap.String("module", modName), zap.Error(err))
+		return nil, err
+	}
+
+	moduleCache.Add(&RuntimeJSModule{
+		Name:    modName,
+		Path:    absEntrypoint,
+		Program: prg,
+		Ast:     ast,
+	})
+
+	return moduleCache, nil
+}
+
+func evalRuntimeModules(rp *RuntimeProviderJS, modCache *RuntimeJSModuleCache, localCache *RuntimeJavascriptLocalCache, announceCallbackFn func(RuntimeExecutionMode, string), dryRun bool) (*RuntimeJavascriptCallbacks, error) {
+	logger := rp.logger
+
+	r := goja.New()
+
+	callbacks := &RuntimeJavascriptCallbacks{
+		Rpc:    make(map[string]string),
+		Before: make(map[string]string),
+		After:  make(map[string]string),
+	}
+
+	// TODO: refactor modCache
+	if len(modCache.Names) == 0 {
+		// There are no JS runtime modules to run.
+		return callbacks, nil
+	}
+	modName := modCache.Names[0]
+
+	initializer := NewRuntimeJavascriptInitModule(logger, modCache.Modules[modName].Ast, callbacks, announceCallbackFn)
+	initializerValue := r.ToValue(initializer.Constructor(r))
+	initializerInst, err := r.New(initializerValue)
+	if err != nil {
+		return nil, err
+	}
+
+	jsLoggerInst, err := NewJSLogger(r, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	na := NewRuntimeJavascriptLinnaModule(&RuntimeJavascriptLinnaModuleOptions{
+		Logger:               logger,
+		DB:                   rp.db,
+		ProtojsonMarshaler:   rp.protojsonMarshaler,
+		ProtojsonUnmarshaler: rp.protojsonUnmarshaler,
+		Config:               rp.config,
+		Node:                 rp.config.Endpoint.ID,
+	})
+	nk := r.ToValue(na.Constructor(r))
+	nkInst, err := r.New(nk)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = r.RunProgram(modCache.Modules[modName].Program)
+	if err != nil {
+		return nil, err
+	}
+
+	initMod := r.Get("InitModule")
+	initModFn, ok := goja.AssertFunction(initMod)
+	if !ok {
+		logger.Error("InitModule function not found. Function must be defined at top level.", zap.String("module", modName))
+		return nil, errors.New(INIT_MODULE_FN_NAME + " function not found.")
+	}
+
+	if dryRun {
+		// Parse JavaScript code for syntax errors but do not execute the InitModule function.
+		return nil, nil
+	}
+
+	// Execute init module function
+	ctx := NewRuntimeJsInitContext(r, rp.config.Endpoint.ID, rp.config.Runtime.Environment)
+	_, err = initModFn(goja.Null(), ctx, jsLoggerInst, nkInst, initializerInst)
+	if err != nil {
+		if exErr, ok := err.(*goja.Exception); ok {
+			return nil, errors.New(exErr.String())
+		}
+		return nil, err
+	}
+
+	return initializer.Callbacks, nil
+}
+
+// Equivalent to calling freeze on the JavaScript global object making it immutable
+// https://github.com/dop251/goja/issues/362
+func freezeGlobalObject(config RuntimeConfiguration, r *goja.Runtime) {
+	if !config.JsReadOnlyGlobals {
+		return
+	}
+	r.RunString(`
+for (const k of Reflect.ownKeys(globalThis)) {
+    const v = globalThis[k];
+    if (v) {
+        Object.freeze(v);
+        v.prototype && Object.freeze(v.prototype);
+        v.__proto__ && Object.freeze(v.__proto__);
+    }
+}
+`)
 }

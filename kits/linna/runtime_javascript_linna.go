@@ -59,7 +59,7 @@ type RuntimeJavascriptLinnaModuleOptions struct {
 	Logger               *zap.Logger
 	DB                   *sql.DB
 	ProtojsonMarshaler   *protojson.MarshalOptions
-	protojsonUnmarshaler *protojson.UnmarshalOptions
+	ProtojsonUnmarshaler *protojson.UnmarshalOptions
 	Config               Configuration
 	Node                 string
 }
@@ -903,7 +903,7 @@ func NewRuntimeJavascriptLinnaModule(option *RuntimeJavascriptLinnaModuleOptions
 		logger:               option.Logger,
 		db:                   option.DB,
 		protojsonMarshaler:   option.ProtojsonMarshaler,
-		protojsonUnmarshaler: option.protojsonUnmarshaler,
+		protojsonUnmarshaler: option.ProtojsonUnmarshaler,
 		config:               option.Config,
 		localCache:           NewRuntimeJavascriptLocalCache(),
 		node:                 option.Node,
