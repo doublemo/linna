@@ -99,18 +99,6 @@ func (mc *RuntimeJSModuleCache) Add(m *RuntimeJSModule) {
 	sort.Strings(mc.Names)
 }
 
-// RuntimeProviderJSOptions Javascript运行时
-type RuntimeProviderJSOptions struct {
-	Logger               *zap.Logger
-	StartupLogger        *zap.Logger
-	DB                   *sql.DB
-	ProtojsonMarshaler   *protojson.MarshalOptions
-	ProtojsonUnmarshaler *protojson.UnmarshalOptions
-	Config               Configuration
-	Path                 string
-	Entrypoint           string
-}
-
 type RuntimeProviderJS struct {
 	logger               *zap.Logger
 	db                   *sql.DB
@@ -123,6 +111,7 @@ type RuntimeProviderJS struct {
 	newFn                func() *RuntimeJS
 	execution            *RuntimeExecution
 	modules              []string
+	eventFn              RuntimeEventCustomFunction
 }
 
 func (rp *RuntimeProviderJS) Execution() *RuntimeExecution {
@@ -302,37 +291,31 @@ func (rp *RuntimeProviderJS) Put(r *RuntimeJS) {
 	}
 }
 
-func NewRuntimeProviderJS(option *RuntimeProviderJSOptions) (*RuntimeProviderJS, error) {
-	logger := option.Logger
-	startupLogger := option.StartupLogger
-	config := option.Config
+func NewRuntimeProviderJS(c *RuntimeProviderConfiguration) (*RuntimeProviderJS, error) {
+	logger := c.Logger
+	startupLogger := c.StartupLogger
+	config := c.Config
 	runtimeConfig := config.Runtime
-	startupLogger.Info("Initialising JavaScript runtime provider", zap.String("path", option.Path), zap.String("entrypoint", option.Entrypoint))
+	startupLogger.Info("Initialising JavaScript runtime provider", zap.String("path", runtimeConfig.Path), zap.String("entrypoint", runtimeConfig.JsEntrypoint))
 
-	modCache, err := cacheJavascriptModules(startupLogger, option.Path, option.Entrypoint)
+	modCache, err := cacheJavascriptModules(startupLogger, runtimeConfig.Path, runtimeConfig.JsEntrypoint)
 	if err != nil {
 		startupLogger.Fatal("Failed to load JavaScript files", zap.Error(err))
 	}
 
-	jsprotojsonMarshaler := &protojson.MarshalOptions{
-		UseProtoNames:   false,
-		UseEnumNumbers:  option.ProtojsonMarshaler.UseEnumNumbers,
-		EmitUnpopulated: option.ProtojsonMarshaler.EmitUnpopulated,
-		Indent:          option.ProtojsonMarshaler.Indent,
-	}
-
 	localCache := NewRuntimeJavascriptLocalCache()
 	runtimeProviderJS := &RuntimeProviderJS{
-		logger:               option.Logger,
-		db:                   option.DB,
-		protojsonMarshaler:   jsprotojsonMarshaler,
-		protojsonUnmarshaler: option.ProtojsonUnmarshaler,
+		logger:               c.Logger,
+		db:                   c.DB,
+		protojsonMarshaler:   c.ProtojsonMarshaler,
+		protojsonUnmarshaler: c.ProtojsonUnmarshaler,
 		config:               config,
 		poolCh:               make(chan *RuntimeJS, runtimeConfig.JsMaxCount),
 		maxCount:             uint32(runtimeConfig.JsMaxCount),
 		currentCount:         atomic.NewUint32(uint32(runtimeConfig.JsMinCount)),
 		execution:            NewRuntimeExecution(),
 		modules:              make([]string, 0),
+		eventFn:              c.EventFn.eventFunction,
 	}
 
 	callbacks, err := evalRuntimeModules(runtimeProviderJS, modCache, localCache, RegisterRuntimeExecution(runtimeProviderJS, runtimeProviderJS.execution), false)
@@ -344,22 +327,23 @@ func NewRuntimeProviderJS(option *RuntimeProviderJSOptions) (*RuntimeProviderJS,
 	runtimeProviderJS.newFn = func() *RuntimeJS {
 		runtime := goja.New()
 		runtime.RunProgram(modCache.Modules[modCache.Names[0]].Program)
-		freezeGlobalObject(option.Config.Runtime, runtime)
+		freezeGlobalObject(runtimeConfig, runtime)
 
 		jsLoggerInst, err := NewJSLogger(runtime, logger)
 		if err != nil {
 			logger.Fatal("Failed to initialize JavaScript runtime", zap.Error(err))
 		}
 
-		nakamaModule := NewRuntimeJavascriptLinnaModule(&RuntimeJavascriptLinnaModuleOptions{
+		na := NewRuntimeJavascriptLinnaModule(&RuntimeJavascriptLinnaModuleConfiguration{
 			Logger:               logger,
-			DB:                   option.DB,
-			ProtojsonMarshaler:   jsprotojsonMarshaler,
-			ProtojsonUnmarshaler: option.ProtojsonUnmarshaler,
+			DB:                   c.DB,
+			ProtojsonMarshaler:   c.ProtojsonMarshaler,
+			ProtojsonUnmarshaler: c.ProtojsonUnmarshaler,
 			Config:               config,
 			Node:                 config.Endpoint.ID,
+			eventFn:              c.EventFn.eventFunction,
 		})
-		nk := runtime.ToValue(nakamaModule.Constructor(runtime))
+		nk := runtime.ToValue(na.Constructor(runtime))
 		nkInst, err := runtime.New(nk)
 		if err != nil {
 			logger.Fatal("Failed to initialize JavaScript runtime", zap.Error(err))
@@ -369,7 +353,7 @@ func NewRuntimeProviderJS(option *RuntimeProviderJSOptions) (*RuntimeProviderJS,
 			logger:       logger,
 			jsLoggerInst: jsLoggerInst,
 			nkInst:       nkInst,
-			node:         option.Config.Endpoint.ID,
+			node:         config.Endpoint.ID,
 			vm:           runtime,
 			env:          runtime.ToValue(runtimeConfig.Environment),
 			callbacks:    callbacks,
@@ -388,6 +372,22 @@ func NewRuntimeProviderJS(option *RuntimeProviderJSOptions) (*RuntimeProviderJS,
 	startupLogger.Info("Allocated minimum JavaScript runtime pool")
 	runtimeProviderJS.modules = modCache.Names
 	return runtimeProviderJS, nil
+}
+
+func CheckRuntimeProviderJavascript(logger *zap.Logger, config Configuration) error {
+	modCache, err := cacheJavascriptModules(logger, config.Runtime.Path, config.Runtime.JsEntrypoint)
+	if err != nil {
+		return err
+	}
+	rp := &RuntimeProviderJS{
+		logger: logger,
+		config: config,
+	}
+	_, err = evalRuntimeModules(rp, modCache, nil, func(RuntimeExecutionMode, string) {}, true)
+	if err != nil {
+		logger.Error("Failed to load JavaScript module.", zap.Error(err))
+	}
+	return err
 }
 
 func cacheJavascriptModules(logger *zap.Logger, path, entrypoint string) (*RuntimeJSModuleCache, error) {
@@ -467,16 +467,17 @@ func evalRuntimeModules(rp *RuntimeProviderJS, modCache *RuntimeJSModuleCache, l
 		return nil, err
 	}
 
-	na := NewRuntimeJavascriptLinnaModule(&RuntimeJavascriptLinnaModuleOptions{
+	nam := NewRuntimeJavascriptLinnaModule(&RuntimeJavascriptLinnaModuleConfiguration{
 		Logger:               logger,
 		DB:                   rp.db,
 		ProtojsonMarshaler:   rp.protojsonMarshaler,
 		ProtojsonUnmarshaler: rp.protojsonUnmarshaler,
 		Config:               rp.config,
 		Node:                 rp.config.Endpoint.ID,
+		eventFn:              rp.eventFn,
 	})
-	nk := r.ToValue(na.Constructor(r))
-	nkInst, err := r.New(nk)
+	na := r.ToValue(nam.Constructor(r))
+	naInst, err := r.New(na)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +501,7 @@ func evalRuntimeModules(rp *RuntimeProviderJS, modCache *RuntimeJSModuleCache, l
 
 	// Execute init module function
 	ctx := NewRuntimeJsInitContext(r, rp.config.Endpoint.ID, rp.config.Runtime.Environment)
-	_, err = initModFn(goja.Null(), ctx, jsLoggerInst, nkInst, initializerInst)
+	_, err = initModFn(goja.Null(), ctx, jsLoggerInst, naInst, initializerInst)
 	if err != nil {
 		if exErr, ok := err.(*goja.Exception); ok {
 			return nil, errors.New(exErr.String())

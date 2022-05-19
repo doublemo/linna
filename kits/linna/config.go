@@ -52,5 +52,8 @@ func NewConfiguration() Configuration {
 	return Configuration{
 		SourceFile: "./config.yml",
 		Datadir:    filepath.Join(cwd, "data"),
+		Endpoint:   endpoint.NewConfiguration(),
+		Logger:     logger.NewConfiguration(),
+		Runtime:    NewRuntimeConfiguration(),
 	}
 }

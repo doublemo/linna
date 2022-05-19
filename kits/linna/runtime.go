@@ -23,7 +23,6 @@ package linna
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -121,7 +120,15 @@ type RuntimeInfo struct {
 }
 
 // Runtime 运行时
-type Runtime struct{}
+type Runtime struct {
+	rpcFunctions       map[string]RuntimeRpcFunction
+	beforeRtFunctions  map[string]RuntimeBeforeRtFunction
+	afterRtFunctions   map[string]RuntimeAfterRtFunction
+	beforeReqFunctions *RuntimeBeforeReqFunctions
+	afterReqFunctions  *RuntimeAfterReqFunctions
+	eventFunctions     *RuntimeEventFunctions
+	consoleInfo        *RuntimeInfo
+}
 
 type moduleInfo struct {
 	path    string
@@ -139,22 +146,9 @@ func NewRuntime(ctx context.Context, config Configuration) (*Runtime, *RuntimeIn
 	}
 
 	startupLogger.Info("Initialising runtime event queue processor")
-	eventQueue := NewRuntimeEventQueue(log, config)
 	startupLogger.Info("Runtime event queue processor started", zap.Int("size", config.Runtime.EventQueueSize), zap.Int("workers", config.Runtime.EventQueueWorkers))
 
-	// go
-	goModules, goInitializer, err := NewRuntimeProviderGo(ctx, &RuntimeProviderGoOptions{
-		Logger:        log,
-		StartupLogger: startupLogger,
-		Config:        config,
-		Paths:         paths,
-		RootPath:      config.Runtime.Path,
-		Queue:         eventQueue,
-		DB:            nil,
-	})
-
-	// javascript
-	jsProvider, err := NewRuntimeProviderJS(&RuntimeProviderJSOptions{
+	c := &RuntimeProviderConfiguration{
 		Logger:        log,
 		StartupLogger: startupLogger,
 		Config:        config,
@@ -168,15 +162,36 @@ func NewRuntime(ctx context.Context, config Configuration) (*Runtime, *RuntimeIn
 		ProtojsonUnmarshaler: &protojson.UnmarshalOptions{
 			DiscardUnknown: false,
 		},
-		Path:       config.Runtime.Path,
-		Entrypoint: config.Runtime.JsEntrypoint,
-	})
+		Paths: paths,
+	}
+	// go
+	g, err := NewRuntimeProviderGo(ctx, c)
+	if err != nil {
+		startupLogger.Error("Error initialising Go runtime provider", zap.Error(err))
+		return nil, nil, err
+	}
 
-	fmt.Println(goModules, goInitializer, eventQueue, err)
-	jsModules := jsProvider.Modules()
-	allModules := make([]string, len(goModules)+len(jsModules))
+	// lua
+	lua, err := NewRuntimeProviderLua(c)
+	if err != nil {
+		startupLogger.Error("Error initialising Lua runtime provider", zap.Error(err))
+		return nil, nil, err
+	}
+
+	// javascript
+	js, err := NewRuntimeProviderJS(c)
+	if err != nil {
+		startupLogger.Error("Error initialising Javascript runtime provider", zap.Error(err))
+		return nil, nil, err
+	}
+
+	goModules := g.Modules()
+	luaModules := lua.Modules()
+	jsModules := js.Modules()
+	allModules := make([]string, len(goModules)+len(luaModules)+len(jsModules))
 	copy(allModules[0:], goModules[0:])
-	copy(allModules[len(goModules):], jsModules[0:])
+	copy(allModules[len(goModules):], luaModules[0:])
+	copy(allModules[len(goModules)+len(luaModules):], jsModules[0:])
 
 	startupLogger.Info("Found runtime modules", zap.Int("count", len(allModules)), zap.Strings("modules", allModules))
 	return &Runtime{}, nil, nil
@@ -220,17 +235,17 @@ func CheckRuntime(logger *zap.Logger, config Configuration) error {
 		return err
 	}
 
-	// // Check any Lua runtime modules.
-	// err = CheckRuntimeProviderLua(logger, config, paths)
-	// if err != nil {
-	// 	return err
-	// }
+	// Check any Lua runtime modules.
+	err = CheckRuntimeProviderLua(logger, config, paths)
+	if err != nil {
+		return err
+	}
 
-	// // Check any JavaScript runtime modules.
-	// err = CheckRuntimeProviderJavascript(logger, config)
-	// if err != nil {
-	// 	return err
-	// }
+	// Check any JavaScript runtime modules.
+	err = CheckRuntimeProviderJavascript(logger, config)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

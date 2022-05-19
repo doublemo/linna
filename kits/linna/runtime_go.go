@@ -28,9 +28,11 @@ import (
 	"plugin"
 	"strings"
 
+	"github.com/doublemo/linna-common/api"
 	"github.com/doublemo/linna-common/runtime"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // RuntimeGoInitializer go插件初始化容器
@@ -40,73 +42,141 @@ type RuntimeGoInitializer struct {
 	env    map[string]string
 	node   string
 	na     runtime.LinnaModule
-	rpc    map[string]runtime.RuntimeRPCFunction
+
+	execution *RuntimeExecution
+	modules   []string
 }
 
 func (ri *RuntimeGoInitializer) RegisterRpc(id string, fn func(ctx context.Context, logger runtime.Logger, db *sql.DB, na runtime.LinnaModule, payload string) (string, error)) error {
+	id = strings.ToLower(id)
+	ri.execution.Rpc[id] = func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code) {
+		ctx = NewRuntimeGoContext(ctx, RuntimeExecutionModeRPC, NewRuntimeContextConfigurationFromSameRequest(ri.node, ri.env, r))
+		result, fnErr := fn(ctx, ri.logger.WithField("rpc_id", id), ri.db, ri.na, payload)
+		if fnErr != nil {
+			if runtimeErr, ok := fnErr.(*runtime.Error); ok {
+				if runtimeErr.Code <= 0 || runtimeErr.Code >= 17 {
+					// If error is present but code is invalid then default to 13 (Internal) as the error code.
+					return result, runtimeErr, codes.Internal
+				}
+				return result, runtimeErr, codes.Code(runtimeErr.Code)
+			}
+			// Not a runtime error that contains a code.
+			return result, fnErr, codes.Internal
+		}
+
+		return result, nil, codes.OK
+	}
 	return nil
 }
 
-type RuntimeProviderGoOptions struct {
-	Logger        *zap.Logger
-	StartupLogger *zap.Logger
-	Config        Configuration
-	Paths         []string
-	RootPath      string
-	Queue         *RuntimeEventQueue
-	DB            *sql.DB
+func (ri *RuntimeGoInitializer) Execution() *RuntimeExecution {
+	return ri.execution
+}
+
+func (ri *RuntimeGoInitializer) Modules() []string {
+	return ri.modules
 }
 
 //  NewRuntimeProviderGo 创建Go
-func NewRuntimeProviderGo(ctx context.Context, option *RuntimeProviderGoOptions) ([]string, *RuntimeGoInitializer, error) {
-	runtimeLogger := NewRuntimeGoLogger(option.Logger)
-	startupLogger := option.StartupLogger
-	config := option.Config
+func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) (*RuntimeGoInitializer, error) {
+	runtimeLogger := NewRuntimeGoLogger(c.Logger)
+	logger := c.Logger
+	startupLogger := c.StartupLogger
+	config := c.Config
+	runtimeConfig := config.Runtime
 	node := config.Endpoint.Name
-	env := config.Runtime.Environment
+	env := runtimeConfig.Environment
+	eventQueue := NewRuntimeEventQueue(logger, config)
 	na := NewRuntimeGoLinnaModule(&RuntimeGoLinnaModuleOptions{
-		Logger: option.StartupLogger,
-		DB:     option.DB,
-		ProtojsonMarshaler: &protojson.MarshalOptions{
-			UseEnumNumbers:  true,
-			EmitUnpopulated: false,
-			Indent:          "",
-			UseProtoNames:   true,
-		},
-		Config: option.Config,
-		Node:   node,
+		Logger:             logger,
+		DB:                 c.DB,
+		ProtojsonMarshaler: c.ProtojsonMarshaler,
+		Config:             c.Config,
+		Node:               node,
 	})
 
 	initializer := &RuntimeGoInitializer{
 		logger: runtimeLogger,
-		db:     option.DB,
+		db:     c.DB,
 		env:    env,
 		node:   node,
+
+		execution: NewRuntimeExecution(),
 	}
 
-	ctx = NewRuntimeGoContext(ctx, RuntimeExecutionModeRunOnce, NewRuntimeGoContextOptions())
-	startupLogger.Info("Initialising Go runtime provider", zap.String("path", option.RootPath))
+	ctx = NewRuntimeGoContext(ctx, RuntimeExecutionModeRunOnce, &RuntimeContextConfiguration{
+		Env: runtimeConfig.Environment,
+	})
 
+	startupLogger.Info("Initialising Go runtime provider", zap.String("path", runtimeConfig.Path))
 	modules := make([]string, 0)
-	for _, path := range option.Paths {
+	for _, path := range c.Paths {
 		if strings.ToLower(filepath.Ext(path)) != ".so" {
 			continue
 		}
 
-		relPath, name, fn, err := openGoModule(startupLogger, option.RootPath, path)
+		relPath, name, fn, err := openGoModule(startupLogger, runtimeConfig.Path, path)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
-		if err := fn(ctx, runtimeLogger, option.DB, na, initializer); err != nil {
+		if err := fn(ctx, runtimeLogger, c.DB, na, initializer); err != nil {
 			startupLogger.Fatal("Error returned by InitModule function in Go module", zap.String("name", name), zap.Error(err))
-			return nil, nil, err
+			return nil, err
 		}
 
 		modules = append(modules, relPath)
 	}
+	
 	startupLogger.Info("Go runtime modules loaded")
-	return modules, initializer, nil
+	events := &RuntimeEventFunctions{}
+	if len(initializer.execution.EventFunctions) > 0 {
+		events.eventFunction = func(ctx context.Context, evt *api.Event) {
+			eventQueue.Queue(func() {
+				for _, fn := range initializer.execution.EventFunctions {
+					fn(ctx, initializer.logger, evt)
+				}
+			})
+		}
+		na.SetEventFn(events.eventFunction)
+	}
+
+	if len(initializer.execution.SessionStartFunctions) > 0 {
+		events.sessionStartFunction = func(r *RuntimeSameRequest, evtTimeSec int64) {
+			ctx := NewRuntimeGoContext(context.Background(), RuntimeExecutionModeEvent, NewRuntimeContextConfigurationFromSameRequest(node, env, r))
+			evt := &api.Event{
+				Name:      "session_start",
+				Timestamp: &timestamppb.Timestamp{Seconds: evtTimeSec},
+			}
+
+			eventQueue.Queue(func() {
+				for _, fn := range initializer.execution.SessionStartFunctions {
+					fn(ctx, initializer.logger, evt)
+				}
+			})
+		}
+	}
+
+	if len(initializer.execution.SessionEndFunctions) > 0 {
+		events.sessionEndFunction = func(r *RuntimeSameRequest, evtTimeSec int64, reason string) {
+			ctx := NewRuntimeGoContext(context.Background(), RuntimeExecutionModeEvent, NewRuntimeContextConfigurationFromSameRequest(node, env, r))
+			evt := &api.Event{
+				Name:       "session_end",
+				Properties: map[string]string{"reason": reason},
+				Timestamp:  &timestamppb.Timestamp{Seconds: evtTimeSec},
+			}
+
+			eventQueue.Queue(func() {
+				for _, fn := range initializer.execution.SessionEndFunctions {
+					fn(ctx, initializer.logger, evt)
+				}
+			})
+		}
+	}
+
+	initializer.modules = modules
+	c.EventFn = events
+	return initializer, nil
 }
 
 // CheckRuntimeProviderGo 检查Go插件

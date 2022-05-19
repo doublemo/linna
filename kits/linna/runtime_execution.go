@@ -22,10 +22,14 @@ package linna
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 
+	"github.com/doublemo/linna-common/api"
+	"github.com/doublemo/linna-common/runtime"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const API_PREFIX = "/linna.api.Linna/"
@@ -48,10 +52,60 @@ type RuntimeSameRequest struct {
 	SessionID   string
 }
 
+// RuntimeContextConfiguration 运行时上下文通用配置参数
+type RuntimeContextConfiguration struct {
+	Node          string              // 节点
+	Env           map[string]string   // 环境变量
+	Headers       map[string][]string // 头信息
+	QueryParams   map[string][]string // 参数
+	SessionID     string              // 会话ID
+	SessionExpiry int64               // 会话过期时间
+	UserID        uint64              // 用户ID
+	Username      string              // 用户
+	Vars          map[string]string   //
+	ClientIP      string              // 客户IP
+	ClientPort    string              // 客户端端口
+	Lang          string              // 语言
+}
+
+func NewRuntimeContextConfigurationFromSameRequest(node string, env map[string]string, r *RuntimeSameRequest) *RuntimeContextConfiguration {
+	return &RuntimeContextConfiguration{
+		Node:          node,
+		Env:           env,
+		Headers:       r.Headers,
+		QueryParams:   r.QueryParams,
+		SessionID:     r.SessionID,
+		SessionExpiry: r.Expiry,
+		UserID:        r.UserID,
+		Username:      r.Username,
+		Vars:          r.Vars,
+		ClientIP:      r.ClientIP,
+		ClientPort:    r.ClientPort,
+		Lang:          r.Lang,
+	}
+}
+
+// RuntimeProviderConfiguration 运行配置
+type RuntimeProviderConfiguration struct {
+	Logger               *zap.Logger
+	StartupLogger        *zap.Logger
+	DB                   *sql.DB
+	ProtojsonMarshaler   *protojson.MarshalOptions
+	ProtojsonUnmarshaler *protojson.UnmarshalOptions
+	Config               Configuration
+
+	EventFn *RuntimeEventFunctions
+	Paths   []string
+}
+
 type (
-	RuntimeRpcFunction      func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
-	RuntimeBeforeRtFunction func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
-	RuntimeAfterRtFunction  func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
+	RuntimeRpcFunction               func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
+	RuntimeBeforeRtFunction          func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
+	RuntimeAfterRtFunction           func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
+	RuntimeEventCustomFunction       func(ctx context.Context, evt *api.Event)
+	RuntimeEventFunction             func(ctx context.Context, logger runtime.Logger, evt *api.Event)
+	RuntimeEventSessionStartFunction func(r *RuntimeSameRequest, evtTimeSec int64)
+	RuntimeEventSessionEndFunction   func(r *RuntimeSameRequest, evtTimeSec int64, reason string)
 )
 
 // RuntimeBeforeReqFunctions 运行时调用方法前
@@ -61,7 +115,11 @@ type RuntimeBeforeReqFunctions struct{}
 type RuntimeAfterReqFunctions struct{}
 
 // RuntimeEventFunctions 运行时事件处理函数
-type RuntimeEventFunctions struct{}
+type RuntimeEventFunctions struct {
+	sessionStartFunction RuntimeEventSessionStartFunction
+	sessionEndFunction   RuntimeEventSessionEndFunction
+	eventFunction        RuntimeEventCustomFunction
+}
 
 // RuntimeProvider
 type RuntimeProvider interface {
@@ -69,11 +127,14 @@ type RuntimeProvider interface {
 }
 
 type RuntimeExecution struct {
-	Rpc                map[string]RuntimeRpcFunction
-	BeforeRtFunctions  map[string]RuntimeBeforeRtFunction
-	AfterRtFunctions   map[string]RuntimeAfterRtFunction
-	BeforeReqFunctions *RuntimeBeforeReqFunctions
-	AfterReqFunctions  *RuntimeAfterReqFunctions
+	Rpc                   map[string]RuntimeRpcFunction
+	BeforeRtFunctions     map[string]RuntimeBeforeRtFunction
+	AfterRtFunctions      map[string]RuntimeAfterRtFunction
+	BeforeReqFunctions    *RuntimeBeforeReqFunctions
+	AfterReqFunctions     *RuntimeAfterReqFunctions
+	EventFunctions        []RuntimeEventFunction
+	SessionStartFunctions []RuntimeEventFunction
+	SessionEndFunctions   []RuntimeEventFunction
 }
 
 func NewRuntimeExecution() *RuntimeExecution {
@@ -98,4 +159,12 @@ func RegisterRuntimeExecution(provider RuntimeProvider, re *RuntimeExecution) fu
 		case RuntimeExecutionModeAfter:
 		}
 	}
+}
+
+func RuntimeExecutionMerge(execs ...*RuntimeExecution) *RuntimeExecution {
+	// re := NewRuntimeExecution()
+	// for _, exec := range execs {
+
+	// }
+	return nil
 }

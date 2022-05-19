@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/dop251/goja v0.0.0-20220501172647-e1eca0b61fa9
-	github.com/doublemo/linna-common v0.0.0-20220516102607-f1b3b3eab649
+	github.com/doublemo/linna-common v0.0.0-20220519060217-1bfc71b9f3c1
 	go.uber.org/zap v1.21.0
 	google.golang.org/grpc v1.46.2
 	google.golang.org/protobuf v1.28.0

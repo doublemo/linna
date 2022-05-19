@@ -33,6 +33,10 @@ github.com/doublemo/linna-common v0.0.0-20220516095814-5c7dd99499ae h1:EGTBCfKNM
 github.com/doublemo/linna-common v0.0.0-20220516095814-5c7dd99499ae/go.mod h1:oazgAE76C6tjihx4ZC7K59xviqhdFTe0IgwdMr0WeM4=
 github.com/doublemo/linna-common v0.0.0-20220516102607-f1b3b3eab649 h1:MnlXC0qIpW4wUjgKOcbIrcF8Tlsf4qxoBogWsinut68=
 github.com/doublemo/linna-common v0.0.0-20220516102607-f1b3b3eab649/go.mod h1:oazgAE76C6tjihx4ZC7K59xviqhdFTe0IgwdMr0WeM4=
+github.com/doublemo/linna-common v0.0.0-20220518063636-e9f92ed34138 h1:2fjindoNgJ44MXNEXMuqCm3hKZqfgaPR+nOPljycWLg=
+github.com/doublemo/linna-common v0.0.0-20220518063636-e9f92ed34138/go.mod h1:oazgAE76C6tjihx4ZC7K59xviqhdFTe0IgwdMr0WeM4=
+github.com/doublemo/linna-common v0.0.0-20220519060217-1bfc71b9f3c1 h1:/7g9phlo29WD7uskgNa/ZxcQwyco1iU75yWBWEXJmw0=
+github.com/doublemo/linna-common v0.0.0-20220519060217-1bfc71b9f3c1/go.mod h1:8evZbzFO0plyfsPEual7UdzI2GLt5y8n+mdY8lUBPd8=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=

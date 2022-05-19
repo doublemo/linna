@@ -58,6 +58,21 @@ type Configuration struct {
 	Format     string `yaml:"format" json:"format" usage:"Set logging output format. Can either be 'JSON' or 'Stackdriver'. Default is 'JSON'."`
 }
 
+func NewConfiguration() Configuration {
+	return Configuration{
+		Level:      "info",
+		Stdout:     true,
+		File:       "",
+		Rotation:   false,
+		MaxSize:    100,
+		MaxAge:     0,
+		MaxBackups: 0,
+		LocalTime:  true,
+		Compress:   false,
+		Format:     "JSON",
+	}
+}
+
 // Check 检查配置文件
 func (c *Configuration) Check() error {
 	return nil

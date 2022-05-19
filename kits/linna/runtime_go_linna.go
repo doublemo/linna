@@ -29,8 +29,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-// RuntimeGoLinnaModuleOptions 运行时间创建module参数
-type RuntimeGoLinnaModuleOptions struct {
+// RuntimeGoLinnaModuleConfiguration 运行时间创建module参数
+type RuntimeGoLinnaModuleConfiguration struct {
 	Logger             *zap.Logger
 	DB                 *sql.DB
 	ProtojsonMarshaler *protojson.MarshalOptions
@@ -46,20 +46,26 @@ type RuntimeGoLinnaModule struct {
 	protojsonMarshaler *protojson.MarshalOptions
 	config             Configuration
 
-	//eventFn RuntimeEventCustomFunction
-	node string
+	eventFn RuntimeEventCustomFunction
+	node    string
 }
 
-func NewRuntimeGoLinnaModule(option *RuntimeGoLinnaModuleOptions) *RuntimeGoLinnaModule {
+func NewRuntimeGoLinnaModule(c *RuntimeGoLinnaModuleConfiguration) *RuntimeGoLinnaModule {
 	return &RuntimeGoLinnaModule{
-		logger:             option.Logger,
-		db:                 option.DB,
-		protojsonMarshaler: option.ProtojsonMarshaler,
-		config:             option.Config,
-		node:               option.Node,
+		logger:             c.Logger,
+		db:                 c.DB,
+		protojsonMarshaler: c.ProtojsonMarshaler,
+		config:             c.Config,
+		node:               c.Node,
 	}
 }
 
 func (n *RuntimeGoLinnaModule) Authenticate(ctx context.Context, token, username string, create bool) (string, string, bool, error) {
 	return "", "", false, nil
+}
+
+func (n *RuntimeGoLinnaModule) SetEventFn(fn RuntimeEventCustomFunction) {
+	n.Lock()
+	n.eventFn = fn
+	n.Unlock()
 }

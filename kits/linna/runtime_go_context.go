@@ -26,62 +26,39 @@ import (
 	"github.com/doublemo/linna-common/runtime"
 )
 
-// RuntimeGoContextOptions Go运行时上下文创建参数项
-type RuntimeGoContextOptions struct {
-	Node          string            // 节点
-	Env           map[string]string // 环境变量
-	Headers       map[string]string // 头信息
-	QueryParams   map[string]string // 参数
-	SeessionID    string            // 会话ID
-	SessionExpiry int64             // 会话过期时间
-	UserID        string            // 用户ID
-	UserName      string            // 用户
-	Vars          map[string]string //
-	ClientIP      string            // 客户IP
-	ClientPort    string            // 客户端端口
-	Lang          string            // 语言
-}
-
-// NewRuntimeGoContextOptions 参数
-func NewRuntimeGoContextOptions() *RuntimeGoContextOptions {
-	return &RuntimeGoContextOptions{
-		Env: make(map[string]string),
-	}
-}
-
 // NewRuntimeGoContext 创建Go运行时上下文
-func NewRuntimeGoContext(ctx context.Context, mode RuntimeExecutionMode, options *RuntimeGoContextOptions) context.Context {
-	ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_ENV, options.Env)
+func NewRuntimeGoContext(ctx context.Context, mode RuntimeExecutionMode, c *RuntimeContextConfiguration) context.Context {
+	ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_ENV, c.Env)
 	ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_MODE, mode.String())
-	ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_NODE, options.Node)
+	ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_NODE, c.Node)
 
-	if options.Headers != nil {
-		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_HEADERS, options.Headers)
+	if c.Headers != nil {
+		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_HEADERS, c.Headers)
 	}
 
-	if options.QueryParams != nil {
-		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_QUERY_PARAMS, options.QueryParams)
+	if c.QueryParams != nil {
+		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_QUERY_PARAMS, c.QueryParams)
 	}
 
-	if options.UserID != "" {
-		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_USER_ID, options.UserID)
-		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_USERNAME, options.UserName)
-		if options.Vars != nil {
-			ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_VARS, options.Vars)
+	if c.UserID != 0 {
+		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_USER_ID, c.UserID)
+		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_USERNAME, c.Username)
+		if c.Vars != nil {
+			ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_VARS, c.Vars)
 		}
 
-		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_USER_SESSION_EXP, options.SessionExpiry)
-		if options.SeessionID != "" {
-			ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_SESSION_ID, options.SeessionID)
-			ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_LANG, options.Lang)
+		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_USER_SESSION_EXP, c.SessionExpiry)
+		if c.SessionID != "" {
+			ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_SESSION_ID, c.SessionID)
+			ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_LANG, c.Lang)
 		}
 	}
 
-	if options.ClientIP != "" {
-		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_CLIENT_IP, options.ClientIP)
+	if c.ClientIP != "" {
+		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_CLIENT_IP, c.ClientIP)
 	}
-	if options.ClientPort != "" {
-		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_CLIENT_PORT, options.ClientPort)
+	if c.ClientPort != "" {
+		ctx = context.WithValue(ctx, runtime.RUNTIME_CTX_CLIENT_PORT, c.ClientPort)
 	}
 
 	return ctx

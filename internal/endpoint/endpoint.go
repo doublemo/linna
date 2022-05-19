@@ -25,3 +25,10 @@ type Configuration struct {
 	ID   string `yaml:"id" json:"id" usage:"节点唯一编号"`
 	Name string `yaml:"name" json:"name" usage:"节点唯一名称"`
 }
+
+func NewConfiguration() Configuration {
+	return Configuration{
+		ID:   "linna-node-1",
+		Name: "Linna",
+	}
+}

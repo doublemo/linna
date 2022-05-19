@@ -21,6 +21,7 @@
 package linna
 
 import (
+	"context"
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
@@ -44,6 +45,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/dop251/goja"
+	"github.com/doublemo/linna-common/api"
 	"github.com/doublemo/linna/cores/cronexpr"
 	"github.com/doublemo/linna/internal/database"
 	"github.com/gofrs/uuid"
@@ -54,14 +56,15 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// RuntimeJavascriptLinnaModuleOptions 运行时间创建module参数
-type RuntimeJavascriptLinnaModuleOptions struct {
+// RuntimeJavascriptLinnaModuleConfiguration 运行时间创建module参数
+type RuntimeJavascriptLinnaModuleConfiguration struct {
 	Logger               *zap.Logger
 	DB                   *sql.DB
 	ProtojsonMarshaler   *protojson.MarshalOptions
 	ProtojsonUnmarshaler *protojson.UnmarshalOptions
 	Config               Configuration
 	Node                 string
+	eventFn              RuntimeEventCustomFunction
 }
 
 // RuntimeJavascriptLinnaModule 运行Linna模块
@@ -74,8 +77,8 @@ type RuntimeJavascriptLinnaModule struct {
 	localCache           *RuntimeJavascriptLocalCache
 	httpClient           *http.Client
 
-	//eventFn RuntimeEventCustomFunction
-	node string
+	eventFn RuntimeEventCustomFunction
+	node    string
 }
 
 func (n *RuntimeJavascriptLinnaModule) Constructor(r *goja.Runtime) func(goja.ConstructorCall) *goja.Object {
@@ -193,16 +196,14 @@ func (n *RuntimeJavascriptLinnaModule) event(r *goja.Runtime) func(goja.Function
 		if f.Argument(3) != goja.Undefined() {
 			external = getJsBool(r, f.Argument(3))
 		}
-
-		fmt.Println("Javascript event:", eventName, properties, external)
-		// if n.eventFn != nil {
-		// 	n.eventFn(context.Background(), &api.Event{
-		// 		Name:       eventName,
-		// 		Properties: properties,
-		// 		Timestamp:  ts,
-		// 		External:   external,
-		// 	})
-		// }
+		if n.eventFn != nil {
+			n.eventFn(context.Background(), &api.Event{
+				Name:       eventName,
+				Properties: properties,
+				Timestamp:  ts,
+				External:   external,
+			})
+		}
 
 		return goja.Undefined()
 	}
@@ -898,18 +899,19 @@ func (n *RuntimeJavascriptLinnaModule) bcryptCompare(r *goja.Runtime) func(goja.
 	}
 }
 
-func NewRuntimeJavascriptLinnaModule(option *RuntimeJavascriptLinnaModuleOptions) *RuntimeJavascriptLinnaModule {
+func NewRuntimeJavascriptLinnaModule(c *RuntimeJavascriptLinnaModuleConfiguration) *RuntimeJavascriptLinnaModule {
 	return &RuntimeJavascriptLinnaModule{
-		logger:               option.Logger,
-		db:                   option.DB,
-		protojsonMarshaler:   option.ProtojsonMarshaler,
-		protojsonUnmarshaler: option.ProtojsonUnmarshaler,
-		config:               option.Config,
+		logger:               c.Logger,
+		db:                   c.DB,
+		protojsonMarshaler:   c.ProtojsonMarshaler,
+		protojsonUnmarshaler: c.ProtojsonUnmarshaler,
+		config:               c.Config,
 		localCache:           NewRuntimeJavascriptLocalCache(),
-		node:                 option.Node,
+		node:                 c.Node,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		eventFn: c.eventFn,
 	}
 }
 
