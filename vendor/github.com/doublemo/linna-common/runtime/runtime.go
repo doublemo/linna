@@ -23,6 +23,8 @@ package runtime
 import (
 	"context"
 	"database/sql"
+
+	"github.com/doublemo/linna-common/api"
 )
 
 type RuntimeContextValueKT string
@@ -114,6 +116,9 @@ NOTE: You must not cache the reference to this and reuse it as a later point as 
 */
 type Initializer interface {
 	RegisterRpc(id string, fn func(ctx context.Context, logger Logger, db *sql.DB, na LinnaModule, payload string) (string, error)) error
+	RegisterEvent(fn func(ctx context.Context, logger Logger, evt *api.Event)) error
+	RegisterEventSessionStart(fn func(ctx context.Context, logger Logger, evt *api.Event)) error
+	RegisterEventSessionEnd(fn func(ctx context.Context, logger Logger, evt *api.Event)) error
 }
 
 // LinnaModule 模块功能接口

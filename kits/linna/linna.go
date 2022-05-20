@@ -27,6 +27,8 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/doublemo/linna/internal/logger"
+	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -117,7 +119,16 @@ func usage() {
 
 // Serve 开启linna服务
 func Serve(config Configuration) error {
-	runtime, _, err := NewRuntime(context.Background(), config)
+	logger, startupLogger := logger.Logger()
+	// 指标
+	config.Metrics.Node = config.Endpoint.ID
+	localMetrics := metrics.NewLocalMetrics(logger, startupLogger, nil, config.Metrics)
+	runtime, _, err := NewRuntime(context.Background(), localMetrics, config)
+	fn := runtime.execution.Rpc["testrpc"]
+	fn(context.Background(), logger, &RuntimeSameRequest{UserID: 99999999999999}, "dddddd")
+
+	fn2 := runtime.execution.Rpc["clientrpc.rpc"]
+	fn2(context.Background(), logger, &RuntimeSameRequest{UserID: 99999999999999}, "dddddd")
 	fmt.Println(runtime, err)
 	return nil
 }

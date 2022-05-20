@@ -26,6 +26,7 @@ import (
 
 	"github.com/doublemo/linna/internal/endpoint"
 	"github.com/doublemo/linna/internal/logger"
+	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
 )
 
@@ -36,6 +37,7 @@ type Configuration struct {
 	Endpoint   endpoint.Configuration `yaml:"endpoint" json:"endpoint" usage:"节点信息"`
 	Logger     logger.Configuration   `yaml:"log" json:"log" usage:"日志信息配置"`
 	Runtime    RuntimeConfiguration   `yaml:"runtime" json:"runtime" usage:"运行时"`
+	Metrics    metrics.Configuration  `yaml:"metrics" json:"metrics" usage:"指标信息"`
 }
 
 func (c Configuration) Check() error {

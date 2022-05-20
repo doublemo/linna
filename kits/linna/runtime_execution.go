@@ -23,10 +23,12 @@ package linna
 import (
 	"context"
 	"database/sql"
+	"reflect"
 	"strings"
 
 	"github.com/doublemo/linna-common/api"
 	"github.com/doublemo/linna-common/runtime"
+	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -93,6 +95,7 @@ type RuntimeProviderConfiguration struct {
 	ProtojsonMarshaler   *protojson.MarshalOptions
 	ProtojsonUnmarshaler *protojson.UnmarshalOptions
 	Config               Configuration
+	Metrics              metrics.Metrics
 
 	EventFn *RuntimeEventFunctions
 	Paths   []string
@@ -161,10 +164,34 @@ func RegisterRuntimeExecution(provider RuntimeProvider, re *RuntimeExecution) fu
 	}
 }
 
-func RuntimeExecutionMerge(execs ...*RuntimeExecution) *RuntimeExecution {
-	// re := NewRuntimeExecution()
-	// for _, exec := range execs {
+func runtimeExecutionMerge(name string, logger *zap.Logger, desc, src *RuntimeExecution) *RuntimeExecution {
+	for k, v := range src.Rpc {
+		logger.Info("Registered "+name+" runtime RPC function invocation", zap.String("id", k))
+		desc.Rpc[k] = v
+	}
 
-	// }
+	for k, v := range src.BeforeRtFunctions {
+		logger.Info("Registered "+name+" runtime Before function invocation", zap.String("id", k))
+		desc.BeforeRtFunctions[k] = v
+	}
+
+	for k, v := range src.AfterRtFunctions {
+		logger.Info("Registered "+name+" runtime After function invocation", zap.String("id", k))
+		desc.AfterRtFunctions[k] = v
+	}
+	mergeBeforeOrAfterFunctions(name, "Before", logger, desc.BeforeReqFunctions, src.BeforeReqFunctions)
+	mergeBeforeOrAfterFunctions(name, "After", logger, desc.AfterReqFunctions, src.AfterReqFunctions)
 	return nil
+}
+
+func mergeBeforeOrAfterFunctions[T *RuntimeBeforeReqFunctions | *RuntimeAfterReqFunctions](name, sub string, logger *zap.Logger, dest, src T) {
+	t := reflect.ValueOf(dest).Elem()
+	tp := reflect.TypeOf(dest).Elem()
+	s := reflect.ValueOf(src).Elem()
+	for i := 0; i < t.NumField(); i++ {
+		if !s.Field(i).IsNil() {
+			logger.Info("Registered "+name+" runtime "+sub+" function invocation", zap.String("id", tp.Field(i).Name))
+			t.Field(i).Set(s.Field(i))
+		}
+	}
 }

@@ -31,6 +31,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja/ast"
+	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -44,7 +45,7 @@ type RuntimeJS struct {
 	node         string
 	nkInst       goja.Value
 	jsLoggerInst goja.Value
-	env          goja.Value
+	env          map[string]string
 	vm           *goja.Runtime
 	callbacks    *RuntimeJavascriptCallbacks
 }
@@ -112,6 +113,7 @@ type RuntimeProviderJS struct {
 	execution            *RuntimeExecution
 	modules              []string
 	eventFn              RuntimeEventCustomFunction
+	metrics              metrics.Metrics
 }
 
 func (rp *RuntimeProviderJS) Execution() *RuntimeExecution {
@@ -172,20 +174,7 @@ func (r *RuntimeProviderJS) AfterReq(ctx context.Context, same *RuntimeSameReque
 }
 
 func (r *RuntimeJS) InvokeFunction(execMode RuntimeExecutionMode, fn goja.Callable, logger goja.Value, id string, same *RuntimeSameRequest, payloads ...interface{}) (interface{}, error, codes.Code) {
-	ctx := NewRuntimeJsContext(r.vm, execMode, &RuntimeJSContextOptions{
-		Node:          r.node,
-		Env:           r.env,
-		Headers:       same.Headers,
-		QueryParams:   same.QueryParams,
-		SeessionID:    same.SessionID,
-		SessionExpiry: same.Expiry,
-		UserID:        same.UserID,
-		Username:      same.Username,
-		Vars:          same.Vars,
-		ClientIP:      same.ClientIP,
-		ClientPort:    same.ClientPort,
-		Lang:          same.Lang,
-	})
+	ctx := NewRuntimeJsContext(r.vm, execMode, NewRuntimeContextConfigurationFromSameRequest(r.node, r.env, same))
 
 	args := []goja.Value{ctx, logger, r.nkInst}
 	jsArgs := make([]goja.Value, 0, len(args)+len(payloads))
@@ -266,7 +255,7 @@ func (rp *RuntimeProviderJS) Get(ctx context.Context) (*RuntimeJS, error) {
 			// This discrepancy is allowed as it avoids a full mutex locking scenario.
 			break
 		}
-		//rp.metrics.GaugeJsRuntimes(float64(currentCount))
+		rp.metrics.GaugeJsRuntimes(float64(currentCount))
 		return rp.newFn(), nil
 	}
 
@@ -316,6 +305,7 @@ func NewRuntimeProviderJS(c *RuntimeProviderConfiguration) (*RuntimeProviderJS, 
 		execution:            NewRuntimeExecution(),
 		modules:              make([]string, 0),
 		eventFn:              c.EventFn.eventFunction,
+		metrics:              c.Metrics,
 	}
 
 	callbacks, err := evalRuntimeModules(runtimeProviderJS, modCache, localCache, RegisterRuntimeExecution(runtimeProviderJS, runtimeProviderJS.execution), false)
@@ -334,17 +324,18 @@ func NewRuntimeProviderJS(c *RuntimeProviderConfiguration) (*RuntimeProviderJS, 
 			logger.Fatal("Failed to initialize JavaScript runtime", zap.Error(err))
 		}
 
-		na := NewRuntimeJavascriptLinnaModule(&RuntimeJavascriptLinnaModuleConfiguration{
+		nam := NewRuntimeJavascriptLinnaModule(&RuntimeJavascriptLinnaModuleConfiguration{
 			Logger:               logger,
 			DB:                   c.DB,
 			ProtojsonMarshaler:   c.ProtojsonMarshaler,
 			ProtojsonUnmarshaler: c.ProtojsonUnmarshaler,
 			Config:               config,
 			Node:                 config.Endpoint.ID,
-			eventFn:              c.EventFn.eventFunction,
+			EventFn:              c.EventFn.eventFunction,
+			Metrics:              c.Metrics,
 		})
-		nk := runtime.ToValue(na.Constructor(runtime))
-		nkInst, err := runtime.New(nk)
+		na := runtime.ToValue(nam.Constructor(runtime))
+		nkInst, err := runtime.New(na)
 		if err != nil {
 			logger.Fatal("Failed to initialize JavaScript runtime", zap.Error(err))
 		}
@@ -355,7 +346,7 @@ func NewRuntimeProviderJS(c *RuntimeProviderConfiguration) (*RuntimeProviderJS, 
 			nkInst:       nkInst,
 			node:         config.Endpoint.ID,
 			vm:           runtime,
-			env:          runtime.ToValue(runtimeConfig.Environment),
+			env:          runtimeConfig.Environment,
 			callbacks:    callbacks,
 		}
 	}
@@ -367,7 +358,7 @@ func NewRuntimeProviderJS(c *RuntimeProviderConfiguration) (*RuntimeProviderJS, 
 		for i := 0; i < runtimeConfig.JsMinCount; i++ {
 			runtimeProviderJS.poolCh <- runtimeProviderJS.newFn()
 		}
-		//runtimeProviderJS.metrics.GaugeJsRuntimes(float64(config.GetRuntime().JsMinCount))
+		runtimeProviderJS.metrics.GaugeJsRuntimes(float64(runtimeConfig.JsMinCount))
 	}
 	startupLogger.Info("Allocated minimum JavaScript runtime pool")
 	runtimeProviderJS.modules = modCache.Names
@@ -474,7 +465,8 @@ func evalRuntimeModules(rp *RuntimeProviderJS, modCache *RuntimeJSModuleCache, l
 		ProtojsonUnmarshaler: rp.protojsonUnmarshaler,
 		Config:               rp.config,
 		Node:                 rp.config.Endpoint.ID,
-		eventFn:              rp.eventFn,
+		EventFn:              rp.eventFn,
+		Metrics:              rp.metrics,
 	})
 	na := r.ToValue(nam.Constructor(r))
 	naInst, err := r.New(na)

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/doublemo/linna/internal/logger"
+	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -106,6 +107,7 @@ func NewRuntimeConfiguration() RuntimeConfiguration {
 		LuaReadOnlyGlobals: true,
 		JsReadOnlyGlobals:  true,
 		LuaApiStacktrace:   false,
+		JsEntrypoint:       "index.js",
 	}
 }
 
@@ -121,13 +123,21 @@ type RuntimeInfo struct {
 
 // Runtime 运行时
 type Runtime struct {
-	rpcFunctions       map[string]RuntimeRpcFunction
-	beforeRtFunctions  map[string]RuntimeBeforeRtFunction
-	afterRtFunctions   map[string]RuntimeAfterRtFunction
-	beforeReqFunctions *RuntimeBeforeReqFunctions
-	afterReqFunctions  *RuntimeAfterReqFunctions
-	eventFunctions     *RuntimeEventFunctions
-	consoleInfo        *RuntimeInfo
+	execution      *RuntimeExecution
+	eventFunctions *RuntimeEventFunctions
+	consoleInfo    *RuntimeInfo
+}
+
+func (r *Runtime) Event() RuntimeEventCustomFunction {
+	return r.eventFunctions.eventFunction
+}
+
+func (r *Runtime) EventSessionStart() RuntimeEventSessionStartFunction {
+	return r.eventFunctions.sessionStartFunction
+}
+
+func (r *Runtime) EventSessionEnd() RuntimeEventSessionEndFunction {
+	return r.eventFunctions.sessionEndFunction
 }
 
 type moduleInfo struct {
@@ -136,7 +146,7 @@ type moduleInfo struct {
 }
 
 // NewRuntime 创建运行时,支持lua, js , go
-func NewRuntime(ctx context.Context, config Configuration) (*Runtime, *RuntimeInfo, error) {
+func NewRuntime(ctx context.Context, localMetrics metrics.Metrics, config Configuration) (*Runtime, *RuntimeInfo, error) {
 	log, startupLogger := logger.Logger()
 	startupLogger.Info("Initialising runtime", zap.String("path", config.Runtime.Path))
 
@@ -162,7 +172,8 @@ func NewRuntime(ctx context.Context, config Configuration) (*Runtime, *RuntimeIn
 		ProtojsonUnmarshaler: &protojson.UnmarshalOptions{
 			DiscardUnknown: false,
 		},
-		Paths: paths,
+		Paths:   paths,
+		Metrics: localMetrics,
 	}
 	// go
 	g, err := NewRuntimeProviderGo(ctx, c)
@@ -194,7 +205,24 @@ func NewRuntime(ctx context.Context, config Configuration) (*Runtime, *RuntimeIn
 	copy(allModules[len(goModules)+len(luaModules):], jsModules[0:])
 
 	startupLogger.Info("Found runtime modules", zap.Int("count", len(allModules)), zap.Strings("modules", allModules))
-	return &Runtime{}, nil, nil
+
+	rexec := &RuntimeExecution{
+		Rpc:                make(map[string]RuntimeRpcFunction, len(g.Execution().Rpc)+len(lua.Execution().Rpc)+len(js.Execution().Rpc)),
+		BeforeRtFunctions:  make(map[string]RuntimeBeforeRtFunction, len(g.Execution().BeforeRtFunctions)+len(lua.Execution().BeforeRtFunctions)+len(js.Execution().BeforeRtFunctions)),
+		AfterRtFunctions:   make(map[string]RuntimeAfterRtFunction, len(g.Execution().AfterRtFunctions)+len(lua.Execution().AfterRtFunctions)+len(js.Execution().AfterRtFunctions)),
+		BeforeReqFunctions: &RuntimeBeforeReqFunctions{},
+		AfterReqFunctions:  &RuntimeAfterReqFunctions{},
+	}
+
+	// 按顺序合并
+	runtimeExecutionMerge("Javascript", startupLogger, rexec, js.Execution())
+	runtimeExecutionMerge("Lua", startupLogger, rexec, lua.Execution())
+	runtimeExecutionMerge("Go", startupLogger, rexec, g.Execution())
+
+	return &Runtime{
+		execution:      rexec,
+		eventFunctions: c.EventFn,
+	}, nil, nil
 }
 
 func GetRuntimePaths(logger *zap.Logger, rootPath string) ([]string, error) {

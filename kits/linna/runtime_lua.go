@@ -33,6 +33,7 @@ import (
 	"sync"
 
 	lua "github.com/doublemo/linna/cores/gopher-lua"
+	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -92,6 +93,7 @@ type RuntimeProviderLua struct {
 	statsCtx  context.Context
 	execution *RuntimeExecution
 	modules   []string
+	metrics   metrics.Metrics
 }
 
 func NewRuntimeProviderLua(c *RuntimeProviderConfiguration) (*RuntimeProviderLua, error) {
@@ -129,6 +131,7 @@ func NewRuntimeProviderLua(c *RuntimeProviderConfiguration) (*RuntimeProviderLua
 		statsCtx:  context.Background(),
 		execution: NewRuntimeExecution(),
 		modules:   modulePaths,
+		metrics:   c.Metrics,
 	}
 
 	na := &RuntimeLuaLinnaModuleConfiguration{
@@ -140,6 +143,7 @@ func NewRuntimeProviderLua(c *RuntimeProviderConfiguration) (*RuntimeProviderLua
 		EventFn:              c.EventFn.eventFunction,
 		Once:                 once,
 		LocalCache:           localCache,
+		Metrics:              c.Metrics,
 	}
 
 	na.AnnounceCallbackFn = RegisterRuntimeExecution(runtimeProviderLua, runtimeProviderLua.execution)
@@ -206,7 +210,7 @@ func NewRuntimeProviderLua(c *RuntimeProviderConfiguration) (*RuntimeProviderLua
 		for i := 0; i < runtimeConfig.LuaMinCount; i++ {
 			runtimeProviderLua.poolCh <- runtimeProviderLua.newFn()
 		}
-		//runtimeProviderLua.metrics.GaugeLuaRuntimes(float64(config.GetRuntime().GetLuaMinCount()))
+		runtimeProviderLua.metrics.GaugeLuaRuntimes(float64(runtimeConfig.LuaMinCount))
 	}
 	startupLogger.Info("Allocated minimum Lua runtime pool")
 	return runtimeProviderLua, nil
@@ -241,7 +245,7 @@ func (rp *RuntimeProviderLua) Get(ctx context.Context) (*RuntimeLua, error) {
 			// This discrepancy is allowed as it avoids a full mutex locking scenario.
 			break
 		}
-		//rp.metrics.GaugeLuaRuntimes(float64(currentCount))
+		rp.metrics.GaugeLuaRuntimes(float64(currentCount))
 		return rp.newFn(), nil
 	}
 
@@ -655,6 +659,5 @@ func newRuntimeLuaVM(moduleCache *RuntimeLuaModuleCache, stdLibs map[string]lua.
 		env:       runtimeConfig.Environment,
 		callbacks: callbacks,
 	}
-
 	return r, r.loadModules(moduleCache)
 }

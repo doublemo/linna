@@ -47,6 +47,7 @@ import (
 	"github.com/doublemo/linna/cores/cronexpr"
 	lua "github.com/doublemo/linna/cores/gopher-lua"
 	"github.com/doublemo/linna/internal/database"
+	"github.com/doublemo/linna/internal/metrics"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
@@ -69,6 +70,7 @@ type RuntimeLuaLinnaModuleConfiguration struct {
 	AnnounceCallbackFn   func(RuntimeExecutionMode, string)
 	Once                 *sync.Once
 	LocalCache           *RuntimeLuaLocalCache
+	Metrics              metrics.Metrics
 }
 
 type RuntimeLuaLinnaModule struct {
@@ -85,6 +87,7 @@ type RuntimeLuaLinnaModule struct {
 
 	node    string
 	eventFn RuntimeEventCustomFunction
+	metrics metrics.Metrics
 }
 
 func NewRuntimeLuaLinnaModule(c *RuntimeLuaLinnaModuleConfiguration) *RuntimeLuaLinnaModule {
@@ -103,6 +106,7 @@ func NewRuntimeLuaLinnaModule(c *RuntimeLuaLinnaModuleConfiguration) *RuntimeLua
 		config:  c.Config,
 		node:    c.Config.Endpoint.ID,
 		eventFn: c.EventFn,
+		metrics: c.Metrics,
 	}
 }
 

@@ -48,6 +48,7 @@ import (
 	"github.com/doublemo/linna-common/api"
 	"github.com/doublemo/linna/cores/cronexpr"
 	"github.com/doublemo/linna/internal/database"
+	"github.com/doublemo/linna/internal/metrics"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
@@ -64,7 +65,8 @@ type RuntimeJavascriptLinnaModuleConfiguration struct {
 	ProtojsonUnmarshaler *protojson.UnmarshalOptions
 	Config               Configuration
 	Node                 string
-	eventFn              RuntimeEventCustomFunction
+	Metrics              metrics.Metrics
+	EventFn              RuntimeEventCustomFunction
 }
 
 // RuntimeJavascriptLinnaModule 运行Linna模块
@@ -76,6 +78,7 @@ type RuntimeJavascriptLinnaModule struct {
 	config               Configuration
 	localCache           *RuntimeJavascriptLocalCache
 	httpClient           *http.Client
+	metrics              metrics.Metrics
 
 	eventFn RuntimeEventCustomFunction
 	node    string
@@ -911,7 +914,8 @@ func NewRuntimeJavascriptLinnaModule(c *RuntimeJavascriptLinnaModuleConfiguratio
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
-		eventFn: c.eventFn,
+		eventFn: c.EventFn,
+		metrics: c.Metrics,
 	}
 }
 

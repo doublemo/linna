@@ -1,0 +1,81 @@
+// Copyright (c) 2022 The Linna Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author: randyma
+// Date: 2022-05-18 18:19:55
+// LastEditors: randyma
+// LastEditTime: 2022-05-18 18:20:03
+// Description: The realtime protocol for Linna server.
+syntax = "proto3";
+
+package linna.realtime;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "api/api.proto";
+
+option go_package = "github.com/doublemo/linna-common/rtapi";
+
+option java_multiple_files = true;
+option java_outer_classname = "LinnaRealtime";
+option java_package = "com.doublemo.linna.rtapi";
+
+option csharp_namespace = "Linna.Protobuf";
+
+// An envelope for a realtime message.
+message Envelope {
+    string cid = 1;
+    oneof message {
+      // Describes an error which occurred on the server.
+      Error error = 11;
+      // RPC call or response.
+      api.Rpc rpc = 24;
+      // Application-level heartbeat and connection check.
+      Ping ping = 32;
+      // Application-level heartbeat and connection check response.
+      Pong pong = 33;
+    }
+  }
+  
+  // Application-level heartbeat and connection check.
+message Ping {}
+
+// Application-level heartbeat and connection check response.
+message Pong {}
+
+  // A logical error which may occur on the server.
+message Error {
+    // The selection of possible error codes.
+    enum Code {
+      // An unexpected result from the server.
+      RUNTIME_EXCEPTION = 0;
+      // The server received a message which is not recognised.
+      UNRECOGNIZED_PAYLOAD = 1;
+      // A message was expected but contains no content.
+      MISSING_PAYLOAD = 2;
+      // Fields in the message have an invalid format.
+      BAD_INPUT = 3;
+      // The runtime function does not exist on the server.
+      RUNTIME_FUNCTION_NOT_FOUND = 4;
+      // The runtime function executed with an error.
+      RUNTIME_FUNCTION_EXCEPTION = 5;
+    }
+  
+    // The error code which should be one of "Error.Code" enums.
+    int32 code = 1;
+    // A message in English to help developers debug the response.
+    string message = 2;
+    // Additional error details which may be different for each response.
+    map<string, string> context = 3;
+  }

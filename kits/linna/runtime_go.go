@@ -69,6 +69,21 @@ func (ri *RuntimeGoInitializer) RegisterRpc(id string, fn func(ctx context.Conte
 	return nil
 }
 
+func (ri *RuntimeGoInitializer) RegisterEvent(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
+	ri.execution.EventFunctions = append(ri.execution.EventFunctions, fn)
+	return nil
+}
+
+func (ri *RuntimeGoInitializer) RegisterEventSessionStart(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
+	ri.execution.SessionStartFunctions = append(ri.execution.SessionStartFunctions, fn)
+	return nil
+}
+
+func (ri *RuntimeGoInitializer) RegisterEventSessionEnd(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
+	ri.execution.SessionEndFunctions = append(ri.execution.SessionEndFunctions, fn)
+	return nil
+}
+
 func (ri *RuntimeGoInitializer) Execution() *RuntimeExecution {
 	return ri.execution
 }
@@ -87,7 +102,7 @@ func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) 
 	node := config.Endpoint.Name
 	env := runtimeConfig.Environment
 	eventQueue := NewRuntimeEventQueue(logger, config)
-	na := NewRuntimeGoLinnaModule(&RuntimeGoLinnaModuleOptions{
+	na := NewRuntimeGoLinnaModule(&RuntimeGoLinnaModuleConfiguration{
 		Logger:             logger,
 		DB:                 c.DB,
 		ProtojsonMarshaler: c.ProtojsonMarshaler,
@@ -127,7 +142,7 @@ func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) 
 
 		modules = append(modules, relPath)
 	}
-	
+
 	startupLogger.Info("Go runtime modules loaded")
 	events := &RuntimeEventFunctions{}
 	if len(initializer.execution.EventFunctions) > 0 {

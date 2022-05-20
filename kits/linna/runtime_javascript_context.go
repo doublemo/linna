@@ -27,60 +27,44 @@ import (
 	"github.com/doublemo/linna-common/runtime"
 )
 
-// RuntimeJSContextOptions JS运行时上下文创建参数项
-type RuntimeJSContextOptions struct {
-	Node          string              // 节点
-	Env           goja.Value          // 环境变量
-	Headers       map[string][]string // 头信息
-	QueryParams   map[string][]string // 参数
-	SeessionID    string              // 会话ID
-	SessionExpiry int64               // 会话过期时间
-	UserID        uint64              // 用户ID
-	Username      string              // 用户
-	Vars          map[string]string   //
-	ClientIP      string              // 客户IP
-	ClientPort    string              // 客户端端口
-	Lang          string              // 语言
-}
-
 // NewRuntimeJsContext 创建Javascript运行时上下文
-func NewRuntimeJsContext(r *goja.Runtime, mode RuntimeExecutionMode, option *RuntimeJSContextOptions) *goja.Object {
+func NewRuntimeJsContext(r *goja.Runtime, mode RuntimeExecutionMode, c *RuntimeContextConfiguration) *goja.Object {
 	ctxObj := r.NewObject()
-	ctxObj.Set(runtime.RUNTIME_CTX_NODE.String(), option.Node)
-	ctxObj.Set(runtime.RUNTIME_CTX_ENV.String(), option.Env)
+	ctxObj.Set(runtime.RUNTIME_CTX_NODE.String(), c.Node)
+	ctxObj.Set(runtime.RUNTIME_CTX_ENV.String(), r.ToValue(c.Env))
 	ctxObj.Set(runtime.RUNTIME_CTX_MODE.String(), mode.String())
 
-	if option.Headers != nil {
-		ctxObj.Set(runtime.RUNTIME_CTX_HEADERS.String(), option.Headers)
+	if c.Headers != nil {
+		ctxObj.Set(runtime.RUNTIME_CTX_HEADERS.String(), c.Headers)
 	}
 
-	if option.QueryParams != nil {
-		ctxObj.Set(runtime.RUNTIME_CTX_QUERY_PARAMS.String(), option.QueryParams)
+	if c.QueryParams != nil {
+		ctxObj.Set(runtime.RUNTIME_CTX_QUERY_PARAMS.String(), c.QueryParams)
 	}
 
-	if option.Vars != nil {
-		ctxObj.Set(runtime.RUNTIME_CTX_VARS.String(), option.Vars)
+	if c.Vars != nil {
+		ctxObj.Set(runtime.RUNTIME_CTX_VARS.String(), c.Vars)
 	}
 
-	if option.SessionExpiry != 0 {
-		ctxObj.Set(runtime.RUNTIME_CTX_USER_SESSION_EXP.String(), option.SessionExpiry)
+	if c.SessionExpiry != 0 {
+		ctxObj.Set(runtime.RUNTIME_CTX_USER_SESSION_EXP.String(), c.SessionExpiry)
 	}
 
-	ctxObj.Set(runtime.RUNTIME_CTX_USER_ID.String(), option.UserID)
-	if option.SeessionID != "" {
-		ctxObj.Set(runtime.RUNTIME_CTX_SESSION_ID.String(), option.SeessionID)
-		ctxObj.Set(runtime.RUNTIME_CTX_LANG.String(), option.Lang)
+	ctxObj.Set(runtime.RUNTIME_CTX_USER_ID.String(), c.UserID)
+	if c.SessionID != "" {
+		ctxObj.Set(runtime.RUNTIME_CTX_SESSION_ID.String(), c.SessionID)
+		ctxObj.Set(runtime.RUNTIME_CTX_LANG.String(), c.Lang)
 	}
 
-	if option.Username != "" {
-		ctxObj.Set(runtime.RUNTIME_CTX_USERNAME.String(), option.Username)
+	if c.Username != "" {
+		ctxObj.Set(runtime.RUNTIME_CTX_USERNAME.String(), c.Username)
 	}
 
-	if option.ClientIP != "" {
-		ctxObj.Set(runtime.RUNTIME_CTX_CLIENT_IP.String(), option.ClientIP)
+	if c.ClientIP != "" {
+		ctxObj.Set(runtime.RUNTIME_CTX_CLIENT_IP.String(), c.ClientIP)
 	}
-	if option.ClientPort != "" {
-		ctxObj.Set(runtime.RUNTIME_CTX_CLIENT_PORT.String(), option.ClientPort)
+	if c.ClientPort != "" {
+		ctxObj.Set(runtime.RUNTIME_CTX_CLIENT_PORT.String(), c.ClientPort)
 	}
 	return ctxObj
 }
