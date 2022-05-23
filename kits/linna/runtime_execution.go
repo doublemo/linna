@@ -23,8 +23,10 @@ package linna
 import (
 	"context"
 	"reflect"
+	"strings"
 	"sync"
 
+	"github.com/doublemo/linna-common/rtapi"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 )
@@ -276,8 +278,8 @@ func (re *RuntimeExecution) Trace(logger *zap.Logger, name string) *RuntimeExecu
 		logger.Info("Registered "+name+" runtime Before function invocation", zap.String("id", beforeK.Field(i).Name))
 	}
 
-	afterK := reflect.TypeOf(re.beforeReqFunctions).Elem()
-	afterV := reflect.ValueOf(re.beforeReqFunctions).Elem()
+	afterK := reflect.TypeOf(re.afterReqFunctions).Elem()
+	afterV := reflect.ValueOf(re.afterReqFunctions).Elem()
 	for i := 0; i < afterV.NumField(); i++ {
 		if beforeV.Field(i).IsNil() {
 			continue
@@ -285,7 +287,6 @@ func (re *RuntimeExecution) Trace(logger *zap.Logger, name string) *RuntimeExecu
 		logger.Info("Registered "+name+" runtime After function invocation", zap.String("id", afterK.Field(i).Name))
 	}
 	re.RUnlock()
-
 	return re
 }
 
@@ -316,12 +317,32 @@ func RegisterRuntimeExecution(provider RuntimeProvider, re *RuntimeExecution) fu
 			fn := func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code) {
 				return provider.RegisterRPC(ctx, id, r, payload)
 			}
-
 			re.RegisterRPC(id, fn)
 
 		case RuntimeExecutionModeBefore:
-			
+			if strings.HasPrefix(id, strings.ToLower(RTAPI_PREFIX)) {
+				beforeRt := func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, envelope *rtapi.Envelope) (*rtapi.Envelope, error) {
+					return provider.RegisterBeforeRt(ctx, id, r, envelope)
+				}
+				re.RegisterBeforeRt(id, beforeRt)
+			} else if strings.HasPrefix(id, strings.ToLower(API_PREFIX)) {
+				shortID := strings.TrimPrefix(id, strings.ToLower(API_PREFIX))
+				re.GetBeforeReq().Set(shortID, func(ctx context.Context, same *RuntimeSameRequest, req interface{}) (interface{}, error, codes.Code) {
+					return provider.RegisterBeforeReq(ctx, id, same, req)
+				})
+			}
 		case RuntimeExecutionModeAfter:
+			if strings.HasPrefix(id, strings.ToLower(RTAPI_PREFIX)) {
+				afterRt := func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, out, in *rtapi.Envelope) error {
+					return provider.RegisterAfterRt(ctx, id, r, out, in)
+				}
+				re.RegisterAfterRt(id, afterRt)
+			} else if strings.HasPrefix(id, strings.ToLower(API_PREFIX)) {
+				shortID := strings.TrimPrefix(id, strings.ToLower(API_PREFIX))
+				re.GetAfterReq().Set(shortID, func(ctx context.Context, same *RuntimeSameRequest, req interface{}) (interface{}, error, codes.Code) {
+					return provider.RegisterBeforeReq(ctx, id, same, req)
+				})
+			}
 		}
 	}
 }

@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"os"
@@ -32,12 +33,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/doublemo/linna-common/rtapi"
 	lua "github.com/doublemo/linna/cores/gopher-lua"
 	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const LTSentinel = lua.LValueType(-1)
@@ -393,6 +396,272 @@ func (rp *RuntimeProviderLua) RegisterRPC(ctx context.Context, id string, c *Run
 		return "", errors.New("Runtime function returned invalid data - only allowed one return value of type String/Byte."), codes.Internal
 	}
 	return payload, nil, 0
+}
+
+func (rp *RuntimeProviderLua) RegisterBeforeRt(ctx context.Context, id string, same *RuntimeSameRequest, envelope *rtapi.Envelope) (*rtapi.Envelope, error) {
+	r, err := rp.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lf := r.GetCallback(RuntimeExecutionModeBefore, id)
+	if lf == nil {
+		rp.Put(r)
+		return nil, errors.New("Runtime Before function not found.")
+	}
+
+	envelopeJSON, err := rp.protojsonMarshaler.Marshal(envelope)
+	if err != nil {
+		rp.Put(r)
+		rp.logger.Error("Could not marshall envelope to JSON", zap.Any("envelope", envelope), zap.Error(err))
+		return nil, errors.New("Could not run runtime Before function.")
+	}
+	var envelopeMap map[string]interface{}
+	if err := json.Unmarshal([]byte(envelopeJSON), &envelopeMap); err != nil {
+		rp.Put(r)
+		rp.logger.Error("Could not unmarshall envelope to interface{}", zap.Any("envelope_json", envelopeJSON), zap.Error(err))
+		return nil, errors.New("Could not run runtime Before function.")
+	}
+
+	// Set context value used for logging
+	vmCtx := context.WithValue(ctx, ctxLoggerFields{}, map[string]string{"api_id": strings.TrimPrefix(id, RTAPI_PREFIX_LOWERCASE), "mode": RuntimeExecutionModeBefore.String()})
+	r.vm.SetContext(vmCtx)
+	result, fnErr, _, isCustomErr := r.InvokeFunction(RuntimeExecutionModeBefore, lf, same, envelopeMap)
+	r.vm.SetContext(context.Background())
+	rp.Put(r)
+
+	if fnErr != nil {
+		if !isCustomErr {
+			// Errors triggered with `error({msg, code})` could only have come directly from custom runtime code.
+			// Assume they've been fully handled (logged etc) before that error is invoked.
+			rp.logger.Error("Runtime Before function caused an error.", zap.String("id", id), zap.Error(fnErr))
+		}
+
+		return nil, clearFnError(fnErr, rp, lf)
+	}
+
+	if result == nil {
+		return nil, nil
+	}
+
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		rp.logger.Error("Could not marshal result to JSON", zap.Any("result", result), zap.Error(err))
+		return nil, errors.New("Could not complete runtime Before function.")
+	}
+
+	if err = rp.protojsonUnmarshaler.Unmarshal(resultJSON, envelope); err != nil {
+		rp.logger.Error("Could not unmarshal result to envelope", zap.Any("result", result), zap.Error(err))
+		return nil, errors.New("Could not complete runtime Before function.")
+	}
+
+	return envelope, nil
+}
+
+func (rp *RuntimeProviderLua) RegisterAfterRt(ctx context.Context, id string, same *RuntimeSameRequest, out, in *rtapi.Envelope) error {
+	r, err := rp.Get(ctx)
+	if err != nil {
+		return err
+	}
+	lf := r.GetCallback(RuntimeExecutionModeAfter, id)
+	if lf == nil {
+		rp.Put(r)
+		return errors.New("Runtime After function not found.")
+	}
+
+	var outMap map[string]interface{}
+	if out != nil {
+		outJSON, err := rp.protojsonMarshaler.Marshal(out)
+		if err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not marshall envelope to JSON", zap.Any("out", out), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+		if err := json.Unmarshal([]byte(outJSON), &outMap); err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not unmarshall envelope to interface{}", zap.Any("out_json", outJSON), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+	}
+
+	inJSON, err := rp.protojsonMarshaler.Marshal(in)
+	if err != nil {
+		rp.Put(r)
+		rp.logger.Error("Could not marshall envelope to JSON", zap.Any("in", in), zap.Error(err))
+		return errors.New("Could not run runtime After function.")
+	}
+	var inMap map[string]interface{}
+	if err := json.Unmarshal([]byte(inJSON), &inMap); err != nil {
+		rp.Put(r)
+		rp.logger.Error("Could not unmarshall envelope to interface{}", zap.Any("in_json", inJSON), zap.Error(err))
+		return errors.New("Could not run runtime After function.")
+	}
+
+	// Set context value used for logging
+	vmCtx := context.WithValue(ctx, ctxLoggerFields{}, map[string]string{"api_id": strings.TrimPrefix(id, RTAPI_PREFIX_LOWERCASE), "mode": RuntimeExecutionModeAfter.String()})
+	r.vm.SetContext(vmCtx)
+	_, fnErr, _, isCustomErr := r.InvokeFunction(RuntimeExecutionModeAfter, lf, same, outMap, inMap)
+	r.vm.SetContext(context.Background())
+	rp.Put(r)
+
+	if fnErr != nil {
+		if !isCustomErr {
+			// Errors triggered with `error({msg, code})` could only have come directly from custom runtime code.
+			// Assume they've been fully handled (logged etc) before that error is invoked.
+			rp.logger.Error("Runtime After function caused an error.", zap.String("id", id), zap.Error(fnErr))
+		}
+
+		return clearFnError(fnErr, rp, lf)
+	}
+
+	return nil
+}
+
+func (rp *RuntimeProviderLua) RegisterBeforeReq(ctx context.Context, id string, same *RuntimeSameRequest, req interface{}) (interface{}, error, codes.Code) {
+	r, err := rp.Get(ctx)
+	if err != nil {
+		return nil, err, codes.Internal
+	}
+	lf := r.GetCallback(RuntimeExecutionModeBefore, id)
+	if lf == nil {
+		rp.Put(r)
+		return nil, errors.New("Runtime Before function not found."), codes.NotFound
+	}
+
+	var reqMap map[string]interface{}
+	var reqProto proto.Message
+	if req != nil {
+		// Req may be nil for requests that carry no input body.
+		var ok bool
+		reqProto, ok = req.(proto.Message)
+		if !ok {
+			rp.Put(r)
+			rp.logger.Error("Could not cast request to message", zap.Any("request", req))
+			return nil, errors.New("Could not run runtime Before function."), codes.Internal
+		}
+		reqJSON, err := rp.protojsonMarshaler.Marshal(reqProto)
+		if err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not marshall request to JSON", zap.Any("request", reqProto), zap.Error(err))
+			return nil, errors.New("Could not run runtime Before function."), codes.Internal
+		}
+		if err := json.Unmarshal([]byte(reqJSON), &reqMap); err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not unmarshall request to interface{}", zap.Any("request_json", reqJSON), zap.Error(err))
+			return nil, errors.New("Could not run runtime Before function."), codes.Internal
+		}
+	}
+
+	// Set context value used for logging
+	vmCtx := context.WithValue(ctx, ctxLoggerFields{}, map[string]string{"api_id": strings.TrimPrefix(id, API_PREFIX_LOWERCASE), "mode": RuntimeExecutionModeBefore.String()})
+	r.vm.SetContext(vmCtx)
+	result, fnErr, code, isCustomErr := r.InvokeFunction(RuntimeExecutionModeBefore, lf, same, reqMap)
+	r.vm.SetContext(context.Background())
+	rp.Put(r)
+
+	if fnErr != nil {
+		if !isCustomErr {
+			// Errors triggered with `error({msg, code})` could only have come directly from custom runtime code.
+			// Assume they've been fully handled (logged etc) before that error is invoked.
+			rp.logger.Error("Runtime Before function caused an error.", zap.String("id", id), zap.Error(fnErr))
+		}
+
+		return nil, clearFnError(fnErr, rp, lf), code
+	}
+
+	if result == nil || reqMap == nil {
+		// There was no return value, or a return value was not expected (no input to override).
+		return nil, nil, 0
+	}
+
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		rp.logger.Error("Could not marshall result to JSON", zap.Any("result", result), zap.Error(err))
+		return nil, errors.New("Could not complete runtime Before function."), codes.Internal
+	}
+
+	if err = rp.protojsonUnmarshaler.Unmarshal(resultJSON, reqProto); err != nil {
+		rp.logger.Error("Could not unmarshall result to request", zap.Any("result", result), zap.Error(err))
+		return nil, errors.New("Could not complete runtime Before function."), codes.Internal
+	}
+
+	return req, nil, 0
+}
+
+func (rp *RuntimeProviderLua) RegisterAfterReq(ctx context.Context, id string, same *RuntimeSameRequest, res, req interface{}) error {
+	r, err := rp.Get(ctx)
+	if err != nil {
+		return err
+	}
+	lf := r.GetCallback(RuntimeExecutionModeAfter, id)
+	if lf == nil {
+		rp.Put(r)
+		return errors.New("Runtime After function not found.")
+	}
+
+	var resMap map[string]interface{}
+	if res != nil {
+		// Res may be nil if there is no response body.
+		resProto, ok := res.(proto.Message)
+		if !ok {
+			rp.Put(r)
+			rp.logger.Error("Could not cast response to message", zap.Any("response", res))
+			return errors.New("Could not run runtime After function.")
+		}
+		resJSON, err := rp.protojsonMarshaler.Marshal(resProto)
+		if err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not marshall response to JSON", zap.Any("response", resProto), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+
+		if err := json.Unmarshal([]byte(resJSON), &resMap); err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not unmarshall response to interface{}", zap.Any("response_json", resJSON), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+	}
+
+	var reqMap map[string]interface{}
+	if req != nil {
+		// Req may be nil if there is no request body.
+		reqProto, ok := req.(proto.Message)
+		if !ok {
+			rp.Put(r)
+			rp.logger.Error("Could not cast request to message", zap.Any("request", req))
+			return errors.New("Could not run runtime After function.")
+		}
+		reqJSON, err := rp.protojsonMarshaler.Marshal(reqProto)
+		if err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not marshall request to JSON", zap.Any("request", reqProto), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+
+		if err := json.Unmarshal([]byte(reqJSON), &reqMap); err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not unmarshall request to interface{}", zap.Any("request_json", reqJSON), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+	}
+
+	// Set context value used for logging
+	vmCtx := context.WithValue(ctx, ctxLoggerFields{}, map[string]string{"api_id": strings.TrimPrefix(id, API_PREFIX_LOWERCASE), "mode": RuntimeExecutionModeAfter.String()})
+	r.vm.SetContext(vmCtx)
+	_, fnErr, _, isCustomErr := r.InvokeFunction(RuntimeExecutionModeAfter, lf, same, resMap, reqMap)
+	r.vm.SetContext(context.Background())
+	rp.Put(r)
+
+	if fnErr != nil {
+		if !isCustomErr {
+			// Errors triggered with `error({msg, code})` could only have come directly from custom runtime code.
+			// Assume they've been fully handled (logged etc) before that error is invoked.
+			rp.logger.Error("Runtime After function caused an error.", zap.String("id", id), zap.Error(fnErr))
+		}
+
+		return clearFnError(fnErr, rp, lf)
+	}
+
+	return nil
 }
 
 func (r *RuntimeLua) loadModules(moduleCache *RuntimeLuaModuleCache) error {

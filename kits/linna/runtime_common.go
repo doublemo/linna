@@ -23,6 +23,7 @@ package linna
 import (
 	"context"
 	"database/sql"
+	"reflect"
 	"strings"
 
 	"github.com/doublemo/linna-common/api"
@@ -34,7 +35,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-const API_PREFIX = "/linna.api.Linna/"
+const API_PREFIX = "/api.Linna/"
 const RTAPI_PREFIX = "*rtapi.Envelope_"
 
 var API_PREFIX_LOWERCASE = strings.ToLower(API_PREFIX)
@@ -105,6 +106,8 @@ type (
 	RuntimeRpcFunction               func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
 	RuntimeBeforeRtFunction          func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, in *rtapi.Envelope) (*rtapi.Envelope, error)
 	RuntimeAfterRtFunction           func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, out, in *rtapi.Envelope) error
+	RuntimeBeforeReqFunction         func(ctx context.Context, r *RuntimeSameRequest, req interface{}) (interface{}, error, codes.Code)
+	RuntimeAfterReqFunction          func(ctx context.Context, id string, r *RuntimeSameRequest, res, req interface{}) error
 	RuntimeEventCustomFunction       func(ctx context.Context, evt *api.Event)
 	RuntimeEventFunction             func(ctx context.Context, logger runtime.Logger, evt *api.Event)
 	RuntimeEventSessionStartFunction func(r *RuntimeSameRequest, evtTimeSec int64)
@@ -112,10 +115,68 @@ type (
 )
 
 // RuntimeBeforeReqFunctions 运行时调用方法前
-type RuntimeBeforeReqFunctions struct{}
+type RuntimeBeforeReqFunctions struct {
+	Acc RuntimeBeforeReqFunction `beforeReq:"atcc"`
+}
+
+func (r *RuntimeBeforeReqFunctions) Lookup(field string) ([]int, bool) {
+	k := reflect.TypeOf(r).Elem()
+	re, ok := k.FieldByName(field)
+	if ok {
+		return re.Index, true
+	}
+
+	for i := 0; i < k.NumField(); i++ {
+		if v, ok := k.Field(i).Tag.Lookup("beforeReq"); ok && v == field {
+			return k.Field(i).Index, true
+		}
+	}
+	return nil, false
+}
+
+func (r *RuntimeBeforeReqFunctions) Set(field string, value RuntimeBeforeReqFunction) bool {
+	if idx, ok := r.Lookup(field); ok {
+		v := reflect.ValueOf(r).Elem()
+		ret := v.FieldByIndex(idx)
+		val := reflect.ValueOf(&value).Elem()
+		if ret.CanSet() && !val.IsNil() {
+			ret.Set(val)
+			return true
+		}
+	}
+	return false
+}
 
 // RuntimeAfterReqFunctions运行时调用方法后
 type RuntimeAfterReqFunctions struct{}
+
+func (r *RuntimeAfterReqFunctions) Lookup(field string) ([]int, bool) {
+	k := reflect.TypeOf(r).Elem()
+	re, ok := k.FieldByName(field)
+	if ok {
+		return re.Index, true
+	}
+
+	for i := 0; i < k.NumField(); i++ {
+		if v, ok := k.Field(i).Tag.Lookup("afterReq"); ok && v == field {
+			return k.Field(i).Index, true
+		}
+	}
+	return nil, false
+}
+
+func (r *RuntimeAfterReqFunctions) Set(field string, value interface{}) bool {
+	if idx, ok := r.Lookup(field); ok {
+		v := reflect.ValueOf(r).Elem()
+		ret := v.FieldByIndex(idx)
+		val := reflect.ValueOf(value).Elem()
+		if ret.CanSet() && !val.IsNil() {
+			ret.Set(val)
+			return true
+		}
+	}
+	return false
+}
 
 // RuntimeEventFunctions 运行时事件处理函数
 type RuntimeEventFunctions struct {
@@ -127,6 +188,10 @@ type RuntimeEventFunctions struct {
 // RuntimeProvider
 type RuntimeProvider interface {
 	RegisterRPC(ctx context.Context, id string, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
+	RegisterBeforeRt(ctx context.Context, id string, r *RuntimeSameRequest, in *rtapi.Envelope) (*rtapi.Envelope, error)
+	RegisterAfterRt(ctx context.Context, id string, r *RuntimeSameRequest, out, in *rtapi.Envelope) error
+	RegisterBeforeReq(ctx context.Context, id string, same *RuntimeSameRequest, req interface{}) (interface{}, error, codes.Code)
+	RegisterAfterReq(ctx context.Context, id string, same *RuntimeSameRequest, res, req interface{}) error
 	Execution() *RuntimeExecution
 	Modules() []string
 }

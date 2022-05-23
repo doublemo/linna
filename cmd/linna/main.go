@@ -81,18 +81,19 @@ func main() {
 	}
 	rand.Seed(seed)
 
+	// 系统信号处理
+	ctx, ctxCancelFn := context.WithCancel(context.Background())
+
 	// 启动主程序
-	if err := linna.Serve(config); err != nil {
+	if err := linna.Serve(ctx, config); err != nil {
 		log.Panic(err.Error())
 	}
 
-	// 系统信号处理
-	ctx, cancel := context.WithCancel(context.Background())
 	cores.Signal(ctx, func(sig cores.SignalCommand) {
 		switch sig {
 		case cores.SignalINT, cores.SignalTERM:
+			ctxCancelFn()
 			linna.Shutdown()
-			cancel()
 
 		case cores.SignalHUP:
 			if err := linna.Reload(config); err != nil {

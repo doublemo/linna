@@ -21,6 +21,7 @@ github.com/dop251/goja/unistring
 # github.com/doublemo/linna-common v0.0.0-20220519060217-1bfc71b9f3c1
 ## explicit; go 1.18
 github.com/doublemo/linna-common/api
+github.com/doublemo/linna-common/rtapi
 github.com/doublemo/linna-common/runtime
 # github.com/felixge/httpsnoop v1.0.3
 ## explicit; go 1.13
@@ -38,6 +39,9 @@ github.com/golang-jwt/jwt/v4
 # github.com/golang/protobuf v1.5.2
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
+github.com/golang/protobuf/ptypes
+github.com/golang/protobuf/ptypes/any
+github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/gorilla/handlers v1.5.1
 ## explicit; go 1.14
@@ -49,6 +53,7 @@ github.com/jackc/chunkreader/v2
 ## explicit; go 1.12
 github.com/jackc/pgconn
 github.com/jackc/pgconn/internal/ctxwatch
+github.com/jackc/pgconn/stmtcache
 # github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa
 ## explicit; go 1.12
 github.com/jackc/pgerrcode
@@ -64,6 +69,14 @@ github.com/jackc/pgproto3/v2
 # github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b
 ## explicit; go 1.14
 github.com/jackc/pgservicefile
+# github.com/jackc/pgtype v1.11.0
+## explicit; go 1.13
+github.com/jackc/pgtype
+# github.com/jackc/pgx/v4 v4.16.1
+## explicit; go 1.13
+github.com/jackc/pgx/v4
+github.com/jackc/pgx/v4/internal/sanitize
+github.com/jackc/pgx/v4/stdlib
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 ## explicit
 github.com/matttproud/golang_protobuf_extensions/pbutil
@@ -111,13 +124,11 @@ go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
 go.uber.org/zap/zaptest/observer
-# golang.org/x/crypto v0.0.0-20220517005047-85d78b3ac167
+# golang.org/x/crypto v0.0.0-20220518034528-6f7dac969898
 ## explicit; go 1.17
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/pbkdf2
-# golang.org/x/exp v0.0.0-20220518171630-0b5c67f07fdf
-## explicit; go 1.18
 # golang.org/x/sys v0.0.0-20220519141025-dcacdad47464
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
@@ -141,11 +152,16 @@ golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 golang.org/x/text/unicode/rangetable
 golang.org/x/text/width
+# google.golang.org/genproto v0.0.0-20200825200019-8632dd797987
+## explicit; go 1.11
+google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.46.2
 ## explicit; go 1.14
 google.golang.org/grpc/codes
+google.golang.org/grpc/internal/status
 google.golang.org/grpc/metadata
 google.golang.org/grpc/stats
+google.golang.org/grpc/status
 # google.golang.org/protobuf v1.28.0
 ## explicit; go 1.11
 google.golang.org/protobuf/encoding/protojson
@@ -177,6 +193,8 @@ google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/descriptorpb
+google.golang.org/protobuf/types/known/anypb
+google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/known/wrapperspb
 # gopkg.in/natefinch/lumberjack.v2 v2.0.0

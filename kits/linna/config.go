@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/doublemo/linna/internal/database"
 	"github.com/doublemo/linna/internal/endpoint"
 	"github.com/doublemo/linna/internal/logger"
 	"github.com/doublemo/linna/internal/metrics"
@@ -38,6 +39,7 @@ type Configuration struct {
 	Logger     logger.Configuration   `yaml:"log" json:"log" usage:"日志信息配置"`
 	Runtime    RuntimeConfiguration   `yaml:"runtime" json:"runtime" usage:"运行时"`
 	Metrics    metrics.Configuration  `yaml:"metrics" json:"metrics" usage:"指标信息"`
+	Database   database.Configuration `yaml:"db" json:"db" usage:"数据地址,仅支持postgress"`
 }
 
 func (c Configuration) Check() error {
@@ -57,5 +59,6 @@ func NewConfiguration() Configuration {
 		Endpoint:   endpoint.NewConfiguration(),
 		Logger:     logger.NewConfiguration(),
 		Runtime:    NewRuntimeConfiguration(),
+		Database:   database.NewConfiguration(),
 	}
 }

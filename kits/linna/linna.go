@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/doublemo/linna/internal/database"
 	"github.com/doublemo/linna/internal/logger"
 	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
@@ -40,6 +41,8 @@ Usage: linna [options]
     -v, --version                    显示版本信息
 	--data_dir                       设置Linna数据存储地址
 `
+
+var Shutdown = func() {}
 
 // ParseArgs 参数解析
 func ParseArgs(log *zap.Logger, v, commitid, buildAt string) Configuration {
@@ -118,22 +121,32 @@ func usage() {
 }
 
 // Serve 开启linna服务
-func Serve(config Configuration) error {
+func Serve(ctx context.Context, config Configuration) error {
 	logger, startupLogger := logger.Logger()
+
+	// 数据库连接
+	db, dbVersion := database.DbConnect(ctx, startupLogger, config.Database)
+	startupLogger.Info("Database information", zap.String("version", dbVersion))
+
 	// 指标
 	config.Metrics.Node = config.Endpoint.ID
-	localMetrics := metrics.NewLocalMetrics(logger, startupLogger, nil, config.Metrics)
-	runtime, i, err := NewRuntime(context.Background(), localMetrics, config)
+	localMetrics := metrics.NewLocalMetrics(logger, startupLogger, db, config.Metrics)
+	runtime, i, err := NewRuntime(ctx, localMetrics, config)
+	if err != nil {
+		startupLogger.Fatal("Failed initializing runtime modules", zap.Error(err))
+	}
+
 	fn, _ := runtime.execution.GetRPC("testrpc")
 	fn(context.Background(), logger, &RuntimeSameRequest{UserID: 99999999999999}, "dddddd")
 
 	fn2, _ := runtime.execution.GetRPC("clientrpc.rpc")
 	fn2(context.Background(), logger, &RuntimeSameRequest{UserID: 99999999999999}, "dddddd")
 	fmt.Println(runtime, err, i)
-	return nil
-}
 
-func Shutdown() {
+	Shutdown = func() {
+		localMetrics.Stop(logger)
+	}
+	return nil
 }
 
 func Reload(config Configuration) error {

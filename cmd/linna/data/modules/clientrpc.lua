@@ -21,3 +21,11 @@ local function rpc_get(_context, _payload)
     return na.json_encode(response)
 end
 na.register_rpc(rpc_get, "clientrpc.rpc_get")
+
+
+local function getCC(_context, _payload) 
+    na.logger_debug("ddsdssdsdsd----d---->")
+end
+
+na.register_rt_before(getCC, "clientrpc.getcc")
+na.register_req_before(getCC, "atcc")

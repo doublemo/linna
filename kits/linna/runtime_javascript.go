@@ -23,19 +23,23 @@ package linna
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja/ast"
+	"github.com/doublemo/linna-common/rtapi"
 	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const JavascriptEntrypointFilename = "index.js"
@@ -166,11 +170,294 @@ func (rp *RuntimeProviderJS) RegisterRPC(ctx context.Context, id string, same *R
 	return payload, nil, code
 }
 
-func (r *RuntimeProviderJS) BeforeRt(ctx context.Context, id string, same *RuntimeSameRequest) {}
-func (r *RuntimeProviderJS) AfterRt(ctx context.Context, id string, same *RuntimeSameRequest)  {}
-func (r *RuntimeProviderJS) BeforeReq(ctx context.Context, id string, same *RuntimeSameRequest, req interface{}) {
+func (rp *RuntimeProviderJS) RegisterBeforeRt(ctx context.Context, id string, same *RuntimeSameRequest, envelope *rtapi.Envelope) (*rtapi.Envelope, error) {
+	r, err := rp.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	jsFn := r.GetCallback(RuntimeExecutionModeBefore, id)
+	if jsFn == "" {
+		rp.Put(r)
+		return nil, errors.New("Runtime Before function not found.")
+	}
+
+	envelopeJSON, err := rp.protojsonMarshaler.Marshal(envelope)
+	if err != nil {
+		rp.Put(r)
+		rp.logger.Error("Could not marshall envelope to JSON", zap.Any("envelope", envelope), zap.Error(err))
+		return nil, errors.New("Could not run runtime Before function.")
+	}
+	var envelopeMap map[string]interface{}
+	if err := json.Unmarshal(envelopeJSON, &envelopeMap); err != nil {
+		rp.Put(r)
+		rp.logger.Error("Could not unmarshall envelope to interface{}", zap.Any("envelope_json", envelopeJSON), zap.Error(err))
+		return nil, errors.New("Could not run runtime Before function.")
+	}
+
+	fn, ok := goja.AssertFunction(r.vm.Get(jsFn))
+	if !ok {
+		rp.logger.Error("JavaScript runtime function invalid.", zap.String("key", jsFn), zap.Error(err))
+		return nil, errors.New("Could not run runtime Before function.")
+	}
+
+	jsLogger, err := NewJSLogger(r.vm, rp.logger, zap.String("api_id", strings.TrimPrefix(id, RTAPI_PREFIX_LOWERCASE)), zap.String("mode", RuntimeExecutionModeBefore.String()))
+	if err != nil {
+		rp.logger.Error("Could not instantiate js logger.", zap.Error(err))
+		return nil, errors.New("Could not run runtime Before function.")
+	}
+	result, fnErr, _ := r.InvokeFunction(RuntimeExecutionModeBefore, fn, jsLogger, id, same, envelopeMap)
+	rp.Put(r)
+
+	if fnErr != nil {
+		if jsErr, ok := fnErr.(*jsError); ok {
+			if !jsErr.custom {
+				rp.logger.Error("Runtime Before function caused an error.", zap.String("id", id), zap.Error(fnErr))
+			}
+		}
+		return nil, fnErr
+	}
+
+	if result == nil {
+		return nil, nil
+	}
+
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		rp.logger.Error("Could not marshal result to JSON", zap.Any("result", result), zap.Error(err))
+		return nil, errors.New("Could not complete runtime Before function.")
+	}
+
+	if err = rp.protojsonUnmarshaler.Unmarshal(resultJSON, envelope); err != nil {
+		rp.logger.Error("Could not unmarshal result to envelope", zap.Any("result", result), zap.Error(err))
+		return nil, errors.New("Could not complete runtime Before function.")
+	}
+
+	return envelope, nil
 }
-func (r *RuntimeProviderJS) AfterReq(ctx context.Context, same *RuntimeSameRequest, res, req interface{}) {
+
+func (rp *RuntimeProviderJS) RegisterAfterRt(ctx context.Context, id string, same *RuntimeSameRequest, out, in *rtapi.Envelope) error {
+	r, err := rp.Get(ctx)
+	if err != nil {
+		return err
+	}
+	jsFn := r.GetCallback(RuntimeExecutionModeAfter, id)
+	if jsFn == "" {
+		rp.Put(r)
+		return errors.New("Runtime After function not found.")
+	}
+
+	var outMap map[string]interface{}
+	if out != nil {
+		outJSON, err := rp.protojsonMarshaler.Marshal(out)
+		if err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not marshall envelope to JSON", zap.Any("out", out), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+		if err := json.Unmarshal([]byte(outJSON), &outMap); err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not unmarshall envelope to interface{}", zap.Any("out_json", outJSON), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+	}
+
+	inJSON, err := rp.protojsonMarshaler.Marshal(in)
+	if err != nil {
+		rp.Put(r)
+		rp.logger.Error("Could not marshall envelope to JSON", zap.Any("in", in), zap.Error(err))
+		return errors.New("Could not run runtime After function.")
+	}
+	var inMap map[string]interface{}
+	if err := json.Unmarshal([]byte(inJSON), &inMap); err != nil {
+		rp.Put(r)
+		rp.logger.Error("Could not unmarshall envelope to interface{}", zap.Any("in_json", inJSON), zap.Error(err))
+		return errors.New("Could not run runtime After function.")
+	}
+
+	fn, ok := goja.AssertFunction(r.vm.Get(jsFn))
+	if !ok {
+		rp.logger.Error("JavaScript runtime function invalid.", zap.String("key", jsFn), zap.Error(err))
+		return errors.New("Could not run runtime After function.")
+	}
+
+	jsLogger, err := NewJSLogger(r.vm, rp.logger, zap.String("api_id", strings.TrimPrefix(id, RTAPI_PREFIX_LOWERCASE)), zap.String("mode", RuntimeExecutionModeAfter.String()))
+	if err != nil {
+		rp.logger.Error("Could not instantiate js logger.", zap.Error(err))
+		return errors.New("Could not run runtime After function.")
+	}
+	_, fnErr, _ := r.InvokeFunction(RuntimeExecutionModeAfter, fn, jsLogger, id, same, outMap, inMap)
+	rp.Put(r)
+
+	if fnErr != nil {
+		if jsErr, ok := fnErr.(*jsError); ok {
+			if !jsErr.custom {
+				rp.logger.Error("Runtime After function caused an error.", zap.String("id", id), zap.Error(fnErr))
+			}
+		}
+		return fnErr
+	}
+
+	return nil
+}
+
+func (rp *RuntimeProviderJS) RegisterBeforeReq(ctx context.Context, id string, same *RuntimeSameRequest, req interface{}) (interface{}, error, codes.Code) {
+	r, err := rp.Get(ctx)
+	if err != nil {
+		return nil, err, codes.Internal
+	}
+	jsFn := r.GetCallback(RuntimeExecutionModeBefore, id)
+	if jsFn == "" {
+		rp.Put(r)
+		return nil, errors.New("Runtime Before function not found."), codes.NotFound
+	}
+
+	var reqMap map[string]interface{}
+	var reqProto proto.Message
+	if req != nil {
+		// Req may be nil for requests that carry no input body.
+		var ok bool
+		reqProto, ok = req.(proto.Message)
+		if !ok {
+			rp.Put(r)
+			rp.logger.Error("Could not cast request to message", zap.Any("request", req))
+			return nil, errors.New("Could not run runtime Before function."), codes.Internal
+		}
+		reqJSON, err := rp.protojsonMarshaler.Marshal(reqProto)
+		if err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not marshall request to JSON", zap.Any("request", reqProto), zap.Error(err))
+			return nil, errors.New("Could not run runtime Before function."), codes.Internal
+		}
+		if err := json.Unmarshal([]byte(reqJSON), &reqMap); err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not unmarshall request to interface{}", zap.Any("request_json", reqJSON), zap.Error(err))
+			return nil, errors.New("Could not run runtime Before function."), codes.Internal
+		}
+	}
+
+	fn, ok := goja.AssertFunction(r.vm.Get(jsFn))
+	if !ok {
+		rp.logger.Error("JavaScript runtime function invalid.", zap.String("key", jsFn), zap.Error(err))
+		return nil, errors.New("Could not run runtime Before function."), codes.Internal
+	}
+
+	jsLogger, err := NewJSLogger(r.vm, rp.logger, zap.String("api_id", strings.TrimPrefix(id, API_PREFIX_LOWERCASE)), zap.String("mode", RuntimeExecutionModeAfter.String()))
+	if err != nil {
+		rp.logger.Error("Could not instantiate js logger.", zap.Error(err))
+		return nil, errors.New("Could not run runtime Before function."), codes.Internal
+	}
+	result, fnErr, code := r.InvokeFunction(RuntimeExecutionModeBefore, fn, jsLogger, id, same, reqMap)
+	rp.Put(r)
+
+	if fnErr != nil {
+		if jsErr, ok := fnErr.(*jsError); ok {
+			if !jsErr.custom {
+				rp.logger.Error("Runtime Before function caused an error.", zap.String("id", id), zap.Error(err))
+			}
+		}
+		return nil, fnErr, code
+	}
+
+	if result == nil || reqMap == nil {
+		// There was no return value, or a return value was not expected (no input to override).
+		return nil, nil, codes.OK
+	}
+
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		rp.logger.Error("Could not marshall result to JSON", zap.Any("result", result), zap.Error(err))
+		return nil, errors.New("Could not complete runtime Before function."), codes.Internal
+	}
+
+	if err = rp.protojsonUnmarshaler.Unmarshal(resultJSON, reqProto); err != nil {
+		rp.logger.Error("Could not unmarshall result to request", zap.Any("result", result), zap.Error(err))
+		return nil, errors.New("Could not complete runtime Before function."), codes.Internal
+	}
+
+	return req, nil, codes.OK
+}
+
+func (rp *RuntimeProviderJS) RegisterAfterReq(ctx context.Context, id string, same *RuntimeSameRequest, res, req interface{}) error {
+	r, err := rp.Get(ctx)
+	if err != nil {
+		return err
+	}
+	jsFn := r.GetCallback(RuntimeExecutionModeAfter, id)
+	if jsFn == "" {
+		rp.Put(r)
+		return errors.New("Runtime After function not found.")
+	}
+
+	var resMap map[string]interface{}
+	if res != nil {
+		// Res may be nil if there is no response body.
+		resProto, ok := res.(proto.Message)
+		if !ok {
+			rp.Put(r)
+			rp.logger.Error("Could not cast response to message", zap.Any("response", res))
+			return errors.New("Could not run runtime After function.")
+		}
+		resJSON, err := rp.protojsonMarshaler.Marshal(resProto)
+		if err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not marshall response to JSON", zap.Any("response", resProto), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+
+		if err := json.Unmarshal([]byte(resJSON), &resMap); err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not unmarshall response to interface{}", zap.Any("response_json", resJSON), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+	}
+
+	var reqMap map[string]interface{}
+	if req != nil {
+		// Req may be nil if there is no request body.
+		reqProto, ok := req.(proto.Message)
+		if !ok {
+			rp.Put(r)
+			rp.logger.Error("Could not cast request to message", zap.Any("request", req))
+			return errors.New("Could not run runtime After function.")
+		}
+		reqJSON, err := rp.protojsonMarshaler.Marshal(reqProto)
+		if err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not marshall request to JSON", zap.Any("request", reqProto), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+
+		if err := json.Unmarshal([]byte(reqJSON), &reqMap); err != nil {
+			rp.Put(r)
+			rp.logger.Error("Could not unmarshall request to interface{}", zap.Any("request_json", reqJSON), zap.Error(err))
+			return errors.New("Could not run runtime After function.")
+		}
+	}
+
+	fn, ok := goja.AssertFunction(r.vm.Get(jsFn))
+	if !ok {
+		rp.logger.Error("JavaScript runtime function invalid.", zap.String("key", jsFn), zap.Error(err))
+		return errors.New("Could not run runtime After function.")
+	}
+
+	jsLogger, err := NewJSLogger(r.vm, r.logger, zap.String("api_id", strings.TrimPrefix(id, API_PREFIX_LOWERCASE)), zap.String("mode", RuntimeExecutionModeAfter.String()))
+	if err != nil {
+		rp.logger.Error("Could not instantiate js logger.", zap.Error(err))
+		return errors.New("Could not run runtime After function.")
+	}
+	_, fnErr, _ := r.InvokeFunction(RuntimeExecutionModeAfter, fn, jsLogger, id, same, resMap, reqMap)
+	rp.Put(r)
+
+	if fnErr != nil {
+		if jsErr, ok := fnErr.(*jsError); ok {
+			if !jsErr.custom {
+				rp.logger.Error("JavaScript runtime After function caused an error.", zap.String("id", id), zap.Error(fnErr))
+			}
+		}
+		return fnErr
+	}
+
+	return nil
 }
 
 func (r *RuntimeJS) InvokeFunction(execMode RuntimeExecutionMode, fn goja.Callable, logger goja.Value, id string, same *RuntimeSameRequest, payloads ...interface{}) (interface{}, error, codes.Code) {

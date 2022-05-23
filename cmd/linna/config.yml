@@ -11,3 +11,10 @@ runtime:
   path: "./data/modules"
   env:
     - "ddd=ddddd"
+
+metrics: 
+  prometheus_port: 8801
+
+db: 
+  address:
+     - "postgres:123456@localhost:5432/prodgamedb"
