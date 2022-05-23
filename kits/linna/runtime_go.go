@@ -29,14 +29,15 @@ import (
 	"strings"
 
 	"github.com/doublemo/linna-common/api"
+	"github.com/doublemo/linna-common/rtapi"
 	"github.com/doublemo/linna-common/runtime"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// RuntimeGoInitializer go插件初始化容器
-type RuntimeGoInitializer struct {
+// RuntimeProviderGo go插件初始化容器
+type RuntimeProviderGo struct {
 	logger runtime.Logger
 	db     *sql.DB
 	env    map[string]string
@@ -47,9 +48,9 @@ type RuntimeGoInitializer struct {
 	modules   []string
 }
 
-func (ri *RuntimeGoInitializer) RegisterRpc(id string, fn func(ctx context.Context, logger runtime.Logger, db *sql.DB, na runtime.LinnaModule, payload string) (string, error)) error {
+func (ri *RuntimeProviderGo) RegisterRPC(id string, fn func(ctx context.Context, logger runtime.Logger, db *sql.DB, na runtime.LinnaModule, payload string) (string, error)) error {
 	id = strings.ToLower(id)
-	ri.execution.Rpc[id] = func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code) {
+	rpcfn := func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code) {
 		ctx = NewRuntimeGoContext(ctx, RuntimeExecutionModeRPC, NewRuntimeContextConfigurationFromSameRequest(ri.node, ri.env, r))
 		result, fnErr := fn(ctx, ri.logger.WithField("rpc_id", id), ri.db, ri.na, payload)
 		if fnErr != nil {
@@ -66,34 +67,59 @@ func (ri *RuntimeGoInitializer) RegisterRpc(id string, fn func(ctx context.Conte
 
 		return result, nil, codes.OK
 	}
+	ri.execution.RegisterRPC(id, rpcfn)
 	return nil
 }
 
-func (ri *RuntimeGoInitializer) RegisterEvent(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
-	ri.execution.EventFunctions = append(ri.execution.EventFunctions, fn)
+func (ri *RuntimeProviderGo) RegisterBeforeRt(id string, fn func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.LinnaModule, envelope *rtapi.Envelope) (*rtapi.Envelope, error)) error {
+	apiID := strings.ToLower(id)
+	id = strings.ToLower(RTAPI_PREFIX) + apiID
+	beforeRt := func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, envelope *rtapi.Envelope) (*rtapi.Envelope, error) {
+		ctx = NewRuntimeGoContext(ctx, RuntimeExecutionModeBefore, NewRuntimeContextConfigurationFromSameRequest(ri.node, ri.env, r))
+		loggerFields := map[string]interface{}{"api_id": apiID, "mode": RuntimeExecutionModeBefore.String()}
+		return fn(ctx, ri.logger.WithFields(loggerFields), ri.db, ri.na, envelope)
+	}
+	ri.execution.RegisterBeforeRt(id, beforeRt)
 	return nil
 }
 
-func (ri *RuntimeGoInitializer) RegisterEventSessionStart(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
-	ri.execution.SessionStartFunctions = append(ri.execution.SessionStartFunctions, fn)
+func (ri *RuntimeProviderGo) RegisterAfterRt(id string, fn func(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.LinnaModule, out, in *rtapi.Envelope) error) error {
+	apiID := strings.ToLower(id)
+	id = strings.ToLower(RTAPI_PREFIX) + apiID
+	afterRt := func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, out, in *rtapi.Envelope) error {
+		ctx = NewRuntimeGoContext(ctx, RuntimeExecutionModeAfter, NewRuntimeContextConfigurationFromSameRequest(ri.node, ri.env, r))
+		loggerFields := map[string]interface{}{"api_id": apiID, "mode": RuntimeExecutionModeAfter.String()}
+		return fn(ctx, ri.logger.WithFields(loggerFields), ri.db, ri.na, out, in)
+	}
+	ri.execution.RegisterAfterRt(id, afterRt)
 	return nil
 }
 
-func (ri *RuntimeGoInitializer) RegisterEventSessionEnd(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
-	ri.execution.SessionEndFunctions = append(ri.execution.SessionEndFunctions, fn)
+func (ri *RuntimeProviderGo) RegisterEvent(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
+	ri.execution.RegisterEvent(fn)
 	return nil
 }
 
-func (ri *RuntimeGoInitializer) Execution() *RuntimeExecution {
+func (ri *RuntimeProviderGo) RegisterEventSessionStart(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
+	ri.execution.RegisterEventSessionStart(fn)
+	return nil
+}
+
+func (ri *RuntimeProviderGo) RegisterEventSessionEnd(fn func(ctx context.Context, logger runtime.Logger, evt *api.Event)) error {
+	ri.execution.RegisterEventSessionEnd(fn)
+	return nil
+}
+
+func (ri *RuntimeProviderGo) Execution() *RuntimeExecution {
 	return ri.execution
 }
 
-func (ri *RuntimeGoInitializer) Modules() []string {
+func (ri *RuntimeProviderGo) Modules() []string {
 	return ri.modules
 }
 
 //  NewRuntimeProviderGo 创建Go
-func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) (*RuntimeGoInitializer, error) {
+func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) (*RuntimeProviderGo, error) {
 	runtimeLogger := NewRuntimeGoLogger(c.Logger)
 	logger := c.Logger
 	startupLogger := c.StartupLogger
@@ -110,7 +136,7 @@ func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) 
 		Node:               node,
 	})
 
-	initializer := &RuntimeGoInitializer{
+	initializer := &RuntimeProviderGo{
 		logger: runtimeLogger,
 		db:     c.DB,
 		env:    env,
@@ -145,18 +171,18 @@ func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) 
 
 	startupLogger.Info("Go runtime modules loaded")
 	events := &RuntimeEventFunctions{}
-	if len(initializer.execution.EventFunctions) > 0 {
+	if initializer.execution.CountEvent() > 0 {
 		events.eventFunction = func(ctx context.Context, evt *api.Event) {
 			eventQueue.Queue(func() {
-				for _, fn := range initializer.execution.EventFunctions {
-					fn(ctx, initializer.logger, evt)
-				}
+				initializer.execution.ScanEvent(func(i int, evtfn RuntimeEventFunction) {
+					evtfn(ctx, initializer.logger, evt)
+				})
 			})
 		}
 		na.SetEventFn(events.eventFunction)
 	}
 
-	if len(initializer.execution.SessionStartFunctions) > 0 {
+	if initializer.execution.CountEventSessionStart() > 0 {
 		events.sessionStartFunction = func(r *RuntimeSameRequest, evtTimeSec int64) {
 			ctx := NewRuntimeGoContext(context.Background(), RuntimeExecutionModeEvent, NewRuntimeContextConfigurationFromSameRequest(node, env, r))
 			evt := &api.Event{
@@ -165,14 +191,14 @@ func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) 
 			}
 
 			eventQueue.Queue(func() {
-				for _, fn := range initializer.execution.SessionStartFunctions {
-					fn(ctx, initializer.logger, evt)
-				}
+				initializer.execution.ScanEventSessionStart(func(i int, evtfn RuntimeEventFunction) {
+					evtfn(ctx, initializer.logger, evt)
+				})
 			})
 		}
 	}
 
-	if len(initializer.execution.SessionEndFunctions) > 0 {
+	if initializer.execution.CountEventSessionEnd() > 0 {
 		events.sessionEndFunction = func(r *RuntimeSameRequest, evtTimeSec int64, reason string) {
 			ctx := NewRuntimeGoContext(context.Background(), RuntimeExecutionModeEvent, NewRuntimeContextConfigurationFromSameRequest(node, env, r))
 			evt := &api.Event{
@@ -182,9 +208,9 @@ func NewRuntimeProviderGo(ctx context.Context, c *RuntimeProviderConfiguration) 
 			}
 
 			eventQueue.Queue(func() {
-				for _, fn := range initializer.execution.SessionEndFunctions {
-					fn(ctx, initializer.logger, evt)
-				}
+				initializer.execution.ScanEventSessionEnd(func(i int, evtfn RuntimeEventFunction) {
+					evtfn(ctx, initializer.logger, evt)
+				})
 			})
 		}
 	}

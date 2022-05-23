@@ -124,7 +124,7 @@ func (rp *RuntimeProviderJS) Modules() []string {
 	return rp.modules
 }
 
-func (rp *RuntimeProviderJS) Rpc(ctx context.Context, id string, same *RuntimeSameRequest, payload string) (string, error, codes.Code) {
+func (rp *RuntimeProviderJS) RegisterRPC(ctx context.Context, id string, same *RuntimeSameRequest, payload string) (string, error, codes.Code) {
 	r, err := rp.Get(ctx)
 	if err != nil {
 		return "", err, codes.Internal

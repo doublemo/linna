@@ -25,6 +25,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/doublemo/linna/internal/logger"
@@ -114,7 +115,7 @@ func NewRuntimeConfiguration() RuntimeConfiguration {
 // RuntimeInfo 运行时信息
 type RuntimeInfo struct {
 	GoRPCFunctions         []string
-	LuaRPCFunction         []string
+	LuaRPCFunctions        []string
 	JavascriptRPCFunctions []string
 	GoModules              []*moduleInfo
 	LuaModules             []*moduleInfo
@@ -205,24 +206,100 @@ func NewRuntime(ctx context.Context, localMetrics metrics.Metrics, config Config
 	copy(allModules[len(goModules)+len(luaModules):], jsModules[0:])
 
 	startupLogger.Info("Found runtime modules", zap.Int("count", len(allModules)), zap.Strings("modules", allModules))
-
-	rexec := &RuntimeExecution{
-		Rpc:                make(map[string]RuntimeRpcFunction, len(g.Execution().Rpc)+len(lua.Execution().Rpc)+len(js.Execution().Rpc)),
-		BeforeRtFunctions:  make(map[string]RuntimeBeforeRtFunction, len(g.Execution().BeforeRtFunctions)+len(lua.Execution().BeforeRtFunctions)+len(js.Execution().BeforeRtFunctions)),
-		AfterRtFunctions:   make(map[string]RuntimeAfterRtFunction, len(g.Execution().AfterRtFunctions)+len(lua.Execution().AfterRtFunctions)+len(js.Execution().AfterRtFunctions)),
-		BeforeReqFunctions: &RuntimeBeforeReqFunctions{},
-		AfterReqFunctions:  &RuntimeAfterReqFunctions{},
-	}
+	executionGo := g.Execution()
+	executionLua := lua.Execution()
+	executionJs := js.Execution()
+	rexec := NewRuntimeExecutionByCap(
+		executionGo.CountRPC()+executionLua.CountRPC()+executionJs.CountRPC(),
+		executionGo.CountBeforeRt()+executionLua.CountBeforeRt()+executionJs.CountBeforeRt(),
+		executionGo.CountAfterRt()+executionLua.CountAfterRt()+executionJs.CountAfterRt())
 
 	// 按顺序合并
-	runtimeExecutionMerge("Javascript", startupLogger, rexec, js.Execution())
-	runtimeExecutionMerge("Lua", startupLogger, rexec, lua.Execution())
-	runtimeExecutionMerge("Go", startupLogger, rexec, g.Execution())
+	rexec.Merge(executionJs.Trace(startupLogger, "Javascript"))
+	rexec.Merge(executionLua.Trace(startupLogger, "Lua"))
+	rexec.Merge(executionGo.Trace(startupLogger, "Go"))
+
+	rInfo, err := runtimeInfo(paths, g, lua, js)
+	if err != nil {
+		log.Error("Error getting runtime info data.", zap.Error(err))
+		return nil, nil, err
+	}
 
 	return &Runtime{
 		execution:      rexec,
 		eventFunctions: c.EventFn,
-	}, nil, nil
+	}, rInfo, nil
+}
+
+func runtimeInfo(paths []string, g *RuntimeProviderGo, lua, js RuntimeProvider) (*RuntimeInfo, error) {
+	executionJs := js.Execution()
+	executionLua := lua.Execution()
+	executionGo := g.Execution()
+	jsRpcs := make([]string, 0, executionJs.CountRPC())
+	executionJs.ScanRPC(func(k string, v RuntimeRpcFunction) {
+		jsRpcs = append(jsRpcs, k)
+	})
+
+	luaRpcs := make([]string, 0, executionLua.CountRPC())
+	executionLua.ScanRPC(func(k string, v RuntimeRpcFunction) {
+		luaRpcs = append(luaRpcs, k)
+	})
+
+	goRpcs := make([]string, 0, executionGo.CountRPC())
+	executionGo.ScanRPC(func(k string, v RuntimeRpcFunction) {
+		goRpcs = append(goRpcs, k)
+	})
+
+	jsModulePaths := make([]*moduleInfo, 0, len(js.Modules()))
+	luaModulePaths := make([]*moduleInfo, 0, len(lua.Modules()))
+	goModulePaths := make([]*moduleInfo, 0, len(g.Modules()))
+	for _, p := range paths {
+		for _, m := range js.Modules() {
+			if strings.HasSuffix(p, m) {
+				fileInfo, err := os.Stat(p)
+				if err != nil {
+					return nil, err
+				}
+				jsModulePaths = append(jsModulePaths, &moduleInfo{
+					path:    p,
+					modTime: fileInfo.ModTime(),
+				})
+			}
+		}
+		for _, m := range lua.Modules() {
+			if strings.HasSuffix(p, m) {
+				fileInfo, err := os.Stat(p)
+				if err != nil {
+					return nil, err
+				}
+				luaModulePaths = append(luaModulePaths, &moduleInfo{
+					path:    p,
+					modTime: fileInfo.ModTime(),
+				})
+			}
+		}
+		for _, m := range g.Modules() {
+			if strings.HasSuffix(p, m) {
+				fileInfo, err := os.Stat(p)
+				if err != nil {
+					return nil, err
+				}
+				goModulePaths = append(goModulePaths, &moduleInfo{
+					path:    p,
+					modTime: fileInfo.ModTime(),
+				})
+			}
+		}
+	}
+
+	return &RuntimeInfo{
+		LuaRPCFunctions:        luaRpcs,
+		GoRPCFunctions:         goRpcs,
+		JavascriptRPCFunctions: jsRpcs,
+		GoModules:              goModulePaths,
+		LuaModules:             luaModulePaths,
+		JavascriptModules:      jsModulePaths,
+	}, nil
 }
 
 func GetRuntimePaths(logger *zap.Logger, rootPath string) ([]string, error) {

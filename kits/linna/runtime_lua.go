@@ -52,9 +52,9 @@ func (s *LSentinelType) Type() lua.LValueType { return LTSentinel }
 var LSentinel = lua.LValue(&LSentinelType{})
 
 type RuntimeLuaCallbacks struct {
-	RPC    map[string]*lua.LFunction
-	Before map[string]*lua.LFunction
-	After  map[string]*lua.LFunction
+	RPC    *sync.Map
+	Before *sync.Map
+	After  *sync.Map
 }
 
 type RuntimeLuaModule struct {
@@ -350,7 +350,7 @@ func openLuaModules(logger *zap.Logger, rootPath string, paths []string) (*Runti
 	return moduleCache, modulePaths, stdLibs, nil
 }
 
-func (rp *RuntimeProviderLua) Rpc(ctx context.Context, id string, c *RuntimeSameRequest, payload string) (string, error, codes.Code) {
+func (rp *RuntimeProviderLua) RegisterRPC(ctx context.Context, id string, c *RuntimeSameRequest, payload string) (string, error, codes.Code) {
 	r, err := rp.Get(ctx)
 	if err != nil {
 		return "", err, codes.Internal
@@ -469,11 +469,27 @@ func (r *RuntimeLua) loadModules(moduleCache *RuntimeLuaModuleCache) error {
 func (r *RuntimeLua) GetCallback(e RuntimeExecutionMode, key string) *lua.LFunction {
 	switch e {
 	case RuntimeExecutionModeRPC:
-		return r.callbacks.RPC[key]
+		fn, found := r.callbacks.RPC.Load(key)
+		if !found {
+			return nil
+		}
+
+		return fn.(*lua.LFunction)
+
 	case RuntimeExecutionModeBefore:
-		return r.callbacks.Before[key]
+		fn, found := r.callbacks.Before.Load(key)
+		if !found {
+			return nil
+		}
+
+		return fn.(*lua.LFunction)
 	case RuntimeExecutionModeAfter:
-		return r.callbacks.After[key]
+		fn, found := r.callbacks.After.Load(key)
+		if !found {
+			return nil
+		}
+
+		return fn.(*lua.LFunction)
 	}
 
 	return nil
@@ -634,20 +650,20 @@ func newRuntimeLuaVM(moduleCache *RuntimeLuaModuleCache, stdLibs map[string]lua.
 		vm.Call(1, 0)
 	}
 	callbacks := &RuntimeLuaCallbacks{
-		RPC:    make(map[string]*lua.LFunction),
-		Before: make(map[string]*lua.LFunction),
-		After:  make(map[string]*lua.LFunction),
+		RPC:    &sync.Map{},
+		Before: &sync.Map{},
+		After:  &sync.Map{},
 	}
 
 	na := NewRuntimeLuaLinnaModule(c)
 	na.registerCallbackFn = func(e RuntimeExecutionMode, key string, fn *lua.LFunction) {
 		switch e {
 		case RuntimeExecutionModeRPC:
-			callbacks.RPC[key] = fn
+			callbacks.RPC.Store(key, fn)
 		case RuntimeExecutionModeBefore:
-			callbacks.Before[key] = fn
+			callbacks.Before.Store(key, fn)
 		case RuntimeExecutionModeAfter:
-			callbacks.After[key] = fn
+			callbacks.After.Store(key, fn)
 		}
 	}
 

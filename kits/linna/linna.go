@@ -123,13 +123,13 @@ func Serve(config Configuration) error {
 	// 指标
 	config.Metrics.Node = config.Endpoint.ID
 	localMetrics := metrics.NewLocalMetrics(logger, startupLogger, nil, config.Metrics)
-	runtime, _, err := NewRuntime(context.Background(), localMetrics, config)
-	fn := runtime.execution.Rpc["testrpc"]
+	runtime, i, err := NewRuntime(context.Background(), localMetrics, config)
+	fn, _ := runtime.execution.GetRPC("testrpc")
 	fn(context.Background(), logger, &RuntimeSameRequest{UserID: 99999999999999}, "dddddd")
 
-	fn2 := runtime.execution.Rpc["clientrpc.rpc"]
+	fn2, _ := runtime.execution.GetRPC("clientrpc.rpc")
 	fn2(context.Background(), logger, &RuntimeSameRequest{UserID: 99999999999999}, "dddddd")
-	fmt.Println(runtime, err)
+	fmt.Println(runtime, err, i)
 	return nil
 }
 

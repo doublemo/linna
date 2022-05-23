@@ -22,131 +22,290 @@ package linna
 
 import (
 	"context"
-	"database/sql"
 	"reflect"
-	"strings"
+	"sync"
 
-	"github.com/doublemo/linna-common/api"
-	"github.com/doublemo/linna-common/runtime"
-	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/encoding/protojson"
 )
-
-const API_PREFIX = "/linna.api.Linna/"
-const RTAPI_PREFIX = "*rtapi.Envelope_"
-
-var API_PREFIX_LOWERCASE = strings.ToLower(API_PREFIX)
-var RTAPI_PREFIX_LOWERCASE = strings.ToLower(RTAPI_PREFIX)
-
-// RuntimeSameRequest 运行时调用方法参数
-type RuntimeSameRequest struct {
-	Headers     map[string][]string
-	QueryParams map[string][]string
-	UserID      uint64
-	Username    string
-	Vars        map[string]string
-	Expiry      int64
-	ClientIP    string
-	ClientPort  string
-	Lang        string
-	SessionID   string
-}
-
-// RuntimeContextConfiguration 运行时上下文通用配置参数
-type RuntimeContextConfiguration struct {
-	Node          string              // 节点
-	Env           map[string]string   // 环境变量
-	Headers       map[string][]string // 头信息
-	QueryParams   map[string][]string // 参数
-	SessionID     string              // 会话ID
-	SessionExpiry int64               // 会话过期时间
-	UserID        uint64              // 用户ID
-	Username      string              // 用户
-	Vars          map[string]string   //
-	ClientIP      string              // 客户IP
-	ClientPort    string              // 客户端端口
-	Lang          string              // 语言
-}
-
-func NewRuntimeContextConfigurationFromSameRequest(node string, env map[string]string, r *RuntimeSameRequest) *RuntimeContextConfiguration {
-	return &RuntimeContextConfiguration{
-		Node:          node,
-		Env:           env,
-		Headers:       r.Headers,
-		QueryParams:   r.QueryParams,
-		SessionID:     r.SessionID,
-		SessionExpiry: r.Expiry,
-		UserID:        r.UserID,
-		Username:      r.Username,
-		Vars:          r.Vars,
-		ClientIP:      r.ClientIP,
-		ClientPort:    r.ClientPort,
-		Lang:          r.Lang,
-	}
-}
-
-// RuntimeProviderConfiguration 运行配置
-type RuntimeProviderConfiguration struct {
-	Logger               *zap.Logger
-	StartupLogger        *zap.Logger
-	DB                   *sql.DB
-	ProtojsonMarshaler   *protojson.MarshalOptions
-	ProtojsonUnmarshaler *protojson.UnmarshalOptions
-	Config               Configuration
-	Metrics              metrics.Metrics
-
-	EventFn *RuntimeEventFunctions
-	Paths   []string
-}
-
-type (
-	RuntimeRpcFunction               func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
-	RuntimeBeforeRtFunction          func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
-	RuntimeAfterRtFunction           func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
-	RuntimeEventCustomFunction       func(ctx context.Context, evt *api.Event)
-	RuntimeEventFunction             func(ctx context.Context, logger runtime.Logger, evt *api.Event)
-	RuntimeEventSessionStartFunction func(r *RuntimeSameRequest, evtTimeSec int64)
-	RuntimeEventSessionEndFunction   func(r *RuntimeSameRequest, evtTimeSec int64, reason string)
-)
-
-// RuntimeBeforeReqFunctions 运行时调用方法前
-type RuntimeBeforeReqFunctions struct{}
-
-// RuntimeAfterReqFunctions运行时调用方法后
-type RuntimeAfterReqFunctions struct{}
-
-// RuntimeEventFunctions 运行时事件处理函数
-type RuntimeEventFunctions struct {
-	sessionStartFunction RuntimeEventSessionStartFunction
-	sessionEndFunction   RuntimeEventSessionEndFunction
-	eventFunction        RuntimeEventCustomFunction
-}
-
-// RuntimeProvider
-type RuntimeProvider interface {
-	Rpc(ctx context.Context, id string, r *RuntimeSameRequest, payload string) (string, error, codes.Code)
-}
 
 type RuntimeExecution struct {
-	Rpc                   map[string]RuntimeRpcFunction
-	BeforeRtFunctions     map[string]RuntimeBeforeRtFunction
-	AfterRtFunctions      map[string]RuntimeAfterRtFunction
-	BeforeReqFunctions    *RuntimeBeforeReqFunctions
-	AfterReqFunctions     *RuntimeAfterReqFunctions
-	EventFunctions        []RuntimeEventFunction
-	SessionStartFunctions []RuntimeEventFunction
-	SessionEndFunctions   []RuntimeEventFunction
+	sync.RWMutex
+	rpc                   map[string]RuntimeRpcFunction
+	beforeRtFunctions     map[string]RuntimeBeforeRtFunction
+	afterRtFunctions      map[string]RuntimeAfterRtFunction
+	beforeReqFunctions    *RuntimeBeforeReqFunctions
+	afterReqFunctions     *RuntimeAfterReqFunctions
+	eventFunctions        []RuntimeEventFunction
+	sessionStartFunctions []RuntimeEventFunction
+	sessionEndFunctions   []RuntimeEventFunction
+}
+
+func (re *RuntimeExecution) GetRPC(key string) (RuntimeRpcFunction, bool) {
+	re.RLock()
+	defer re.RUnlock()
+	fn, ok := re.rpc[key]
+	return fn, ok
+}
+
+func (re *RuntimeExecution) RegisterRPC(key string, fn RuntimeRpcFunction) {
+	re.Lock()
+	re.rpc[key] = fn
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) CountRPC() (count int) {
+	re.RLock()
+	count = len(re.rpc)
+	re.RUnlock()
+	return
+}
+
+func (re *RuntimeExecution) ScanRPC(fn func(k string, v RuntimeRpcFunction)) {
+	re.RLock()
+	for rk, rv := range re.rpc {
+		re.RUnlock()
+		fn(rk, rv)
+		re.RLock()
+	}
+	re.RUnlock()
+}
+
+func (re *RuntimeExecution) RegisterBeforeRt(key string, fn RuntimeBeforeRtFunction) {
+	re.Lock()
+	re.beforeRtFunctions[key] = fn
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) CountBeforeRt() (count int) {
+	re.RLock()
+	count = len(re.beforeRtFunctions)
+	re.RUnlock()
+	return
+}
+
+func (re *RuntimeExecution) ScanBeforeRt(fn func(k string, v RuntimeBeforeRtFunction)) {
+	re.RLock()
+	for rk, rv := range re.beforeRtFunctions {
+		re.RUnlock()
+		fn(rk, rv)
+		re.RLock()
+	}
+	re.RUnlock()
+}
+
+func (re *RuntimeExecution) RegisterAfterRt(key string, fn RuntimeAfterRtFunction) {
+	re.Lock()
+	re.afterRtFunctions[key] = fn
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) CountAfterRt() (count int) {
+	re.RLock()
+	count = len(re.afterRtFunctions)
+	re.RUnlock()
+	return
+}
+
+func (re *RuntimeExecution) ScanAfterRt(fn func(k string, v RuntimeAfterRtFunction)) {
+	re.RLock()
+	for rk, rv := range re.afterRtFunctions {
+		re.RUnlock()
+		fn(rk, rv)
+		re.RLock()
+	}
+	re.RUnlock()
+}
+
+func (re *RuntimeExecution) RegisterBeforeReq(key string, fn *RuntimeBeforeReqFunctions) {
+	re.Lock()
+	re.beforeReqFunctions = fn
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) RegisterAfterReq(key string, fn *RuntimeAfterReqFunctions) {
+	re.Lock()
+	re.afterReqFunctions = fn
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) RegisterEvent(fn RuntimeEventFunction) {
+	re.Lock()
+	re.eventFunctions = append(re.eventFunctions, fn)
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) CountEvent() (count int) {
+	re.RLock()
+	count = len(re.eventFunctions)
+	re.RUnlock()
+	return
+}
+
+func (re *RuntimeExecution) ScanEvent(fn func(i int, evt RuntimeEventFunction)) {
+	re.RLock()
+	for i, e := range re.eventFunctions {
+		re.RUnlock()
+		fn(i, e)
+		re.RLock()
+	}
+	re.RUnlock()
+}
+
+func (re *RuntimeExecution) RegisterEventSessionStart(fn RuntimeEventFunction) {
+	re.Lock()
+	re.sessionStartFunctions = append(re.sessionStartFunctions, fn)
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) ScanEventSessionStart(fn func(i int, evt RuntimeEventFunction)) {
+	re.RLock()
+	for i, e := range re.sessionStartFunctions {
+		re.RUnlock()
+		fn(i, e)
+		re.RLock()
+	}
+	re.RUnlock()
+}
+
+func (re *RuntimeExecution) CountEventSessionStart() (count int) {
+	re.RLock()
+	count = len(re.sessionStartFunctions)
+	re.RUnlock()
+	return
+}
+
+func (re *RuntimeExecution) ScanEventSessionEnd(fn func(i int, evt RuntimeEventFunction)) {
+	re.RLock()
+	for i, e := range re.sessionEndFunctions {
+		re.RUnlock()
+		fn(i, e)
+		re.RLock()
+	}
+	re.RUnlock()
+}
+
+func (re *RuntimeExecution) RegisterEventSessionEnd(fn RuntimeEventFunction) {
+	re.Lock()
+	re.sessionEndFunctions = append(re.sessionEndFunctions, fn)
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) CountEventSessionEnd() (count int) {
+	re.RLock()
+	count = len(re.sessionEndFunctions)
+	re.RUnlock()
+	return
+}
+
+func (re *RuntimeExecution) GetBeforeReq() *RuntimeBeforeReqFunctions {
+	re.RLock()
+	defer re.RUnlock()
+	return re.beforeReqFunctions
+}
+
+func (re *RuntimeExecution) GetAfterReq() *RuntimeAfterReqFunctions {
+	re.RLock()
+	defer re.RUnlock()
+	return re.afterReqFunctions
+}
+
+func (re *RuntimeExecution) Merge(src *RuntimeExecution) {
+	re.Lock()
+	src.ScanRPC(func(k string, v RuntimeRpcFunction) {
+		re.rpc[k] = v
+	})
+	re.Unlock()
+
+	re.Lock()
+	src.ScanBeforeRt(func(k string, v RuntimeBeforeRtFunction) {
+		re.beforeRtFunctions[k] = v
+	})
+	re.Unlock()
+
+	re.Lock()
+	src.ScanAfterRt(func(k string, v RuntimeAfterRtFunction) {
+		re.afterRtFunctions[k] = v
+	})
+	re.Unlock()
+
+	re.Lock()
+	mergeBeforeOrAfterFunctions(re.beforeReqFunctions, src.GetBeforeReq())
+	mergeBeforeOrAfterFunctions(re.afterReqFunctions, src.GetAfterReq())
+	re.Unlock()
+
+	re.Lock()
+	src.ScanEvent(func(i int, evt RuntimeEventFunction) {
+		re.eventFunctions = append(re.eventFunctions, evt)
+	})
+	re.Unlock()
+
+	re.Lock()
+	src.ScanEventSessionStart(func(i int, evt RuntimeEventFunction) {
+		re.sessionStartFunctions = append(re.sessionStartFunctions, evt)
+	})
+	re.Unlock()
+
+	re.Lock()
+	src.ScanEventSessionEnd(func(i int, evt RuntimeEventFunction) {
+		re.sessionEndFunctions = append(re.sessionEndFunctions, evt)
+	})
+	re.Unlock()
+}
+
+func (re *RuntimeExecution) Trace(logger *zap.Logger, name string) *RuntimeExecution {
+	re.ScanRPC(func(k string, v RuntimeRpcFunction) {
+		logger.Info("Registered "+name+" runtime RPC function invocation", zap.String("id", k))
+	})
+
+	re.ScanBeforeRt(func(k string, v RuntimeBeforeRtFunction) {
+		logger.Info("Registered "+name+" runtime Before function invocation", zap.String("id", k))
+	})
+
+	re.ScanAfterRt(func(k string, v RuntimeAfterRtFunction) {
+		logger.Info("Registered "+name+" runtime After function invocation", zap.String("id", k))
+	})
+
+	re.RLock()
+	beforeK := reflect.TypeOf(re.beforeReqFunctions).Elem()
+	beforeV := reflect.ValueOf(re.beforeReqFunctions).Elem()
+	for i := 0; i < beforeV.NumField(); i++ {
+		if beforeV.Field(i).IsNil() {
+			continue
+		}
+		logger.Info("Registered "+name+" runtime Before function invocation", zap.String("id", beforeK.Field(i).Name))
+	}
+
+	afterK := reflect.TypeOf(re.beforeReqFunctions).Elem()
+	afterV := reflect.ValueOf(re.beforeReqFunctions).Elem()
+	for i := 0; i < afterV.NumField(); i++ {
+		if beforeV.Field(i).IsNil() {
+			continue
+		}
+		logger.Info("Registered "+name+" runtime After function invocation", zap.String("id", afterK.Field(i).Name))
+	}
+	re.RUnlock()
+
+	return re
 }
 
 func NewRuntimeExecution() *RuntimeExecution {
 	return &RuntimeExecution{
-		Rpc:                make(map[string]RuntimeRpcFunction),
-		BeforeRtFunctions:  make(map[string]RuntimeBeforeRtFunction),
-		AfterRtFunctions:   make(map[string]RuntimeAfterRtFunction),
-		BeforeReqFunctions: &RuntimeBeforeReqFunctions{},
-		AfterReqFunctions:  &RuntimeAfterReqFunctions{},
+		rpc:                make(map[string]RuntimeRpcFunction),
+		beforeRtFunctions:  make(map[string]RuntimeBeforeRtFunction),
+		afterRtFunctions:   make(map[string]RuntimeAfterRtFunction),
+		beforeReqFunctions: &RuntimeBeforeReqFunctions{},
+		afterReqFunctions:  &RuntimeAfterReqFunctions{},
+	}
+}
+
+func NewRuntimeExecutionByCap(rpc, beforeRt, afterRt int) *RuntimeExecution {
+	return &RuntimeExecution{
+		rpc:                make(map[string]RuntimeRpcFunction, rpc),
+		beforeRtFunctions:  make(map[string]RuntimeBeforeRtFunction, beforeRt),
+		afterRtFunctions:   make(map[string]RuntimeAfterRtFunction, afterRt),
+		beforeReqFunctions: &RuntimeBeforeReqFunctions{},
+		afterReqFunctions:  &RuntimeAfterReqFunctions{},
 	}
 }
 
@@ -154,43 +313,24 @@ func RegisterRuntimeExecution(provider RuntimeProvider, re *RuntimeExecution) fu
 	return func(mode RuntimeExecutionMode, id string) {
 		switch mode {
 		case RuntimeExecutionModeRPC:
-			re.Rpc[id] = func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code) {
-				return provider.Rpc(ctx, id, r, payload)
+			fn := func(ctx context.Context, logger *zap.Logger, r *RuntimeSameRequest, payload string) (string, error, codes.Code) {
+				return provider.RegisterRPC(ctx, id, r, payload)
 			}
 
+			re.RegisterRPC(id, fn)
+
 		case RuntimeExecutionModeBefore:
+			
 		case RuntimeExecutionModeAfter:
 		}
 	}
 }
 
-func runtimeExecutionMerge(name string, logger *zap.Logger, desc, src *RuntimeExecution) *RuntimeExecution {
-	for k, v := range src.Rpc {
-		logger.Info("Registered "+name+" runtime RPC function invocation", zap.String("id", k))
-		desc.Rpc[k] = v
-	}
-
-	for k, v := range src.BeforeRtFunctions {
-		logger.Info("Registered "+name+" runtime Before function invocation", zap.String("id", k))
-		desc.BeforeRtFunctions[k] = v
-	}
-
-	for k, v := range src.AfterRtFunctions {
-		logger.Info("Registered "+name+" runtime After function invocation", zap.String("id", k))
-		desc.AfterRtFunctions[k] = v
-	}
-	mergeBeforeOrAfterFunctions(name, "Before", logger, desc.BeforeReqFunctions, src.BeforeReqFunctions)
-	mergeBeforeOrAfterFunctions(name, "After", logger, desc.AfterReqFunctions, src.AfterReqFunctions)
-	return nil
-}
-
-func mergeBeforeOrAfterFunctions[T *RuntimeBeforeReqFunctions | *RuntimeAfterReqFunctions](name, sub string, logger *zap.Logger, dest, src T) {
+func mergeBeforeOrAfterFunctions[T *RuntimeBeforeReqFunctions | *RuntimeAfterReqFunctions](dest, src T) {
 	t := reflect.ValueOf(dest).Elem()
-	tp := reflect.TypeOf(dest).Elem()
 	s := reflect.ValueOf(src).Elem()
 	for i := 0; i < t.NumField(); i++ {
 		if !s.Field(i).IsNil() {
-			logger.Info("Registered "+name+" runtime "+sub+" function invocation", zap.String("id", tp.Field(i).Name))
 			t.Field(i).Set(s.Field(i))
 		}
 	}
