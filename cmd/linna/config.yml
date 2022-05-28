@@ -17,4 +17,4 @@ metrics:
 
 db: 
   address:
-     - "postgres:123456@localhost:5432/prodgamedb"
+     - "postgres:123456@localhost:5432/linna"
