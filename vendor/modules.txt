@@ -38,6 +38,7 @@ github.com/gofrs/uuid
 github.com/golang-jwt/jwt/v4
 # github.com/golang/protobuf v1.5.2
 ## explicit; go 1.9
+github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
@@ -157,9 +158,17 @@ golang.org/x/text/width
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.46.2
 ## explicit; go 1.14
+google.golang.org/grpc/attributes
 google.golang.org/grpc/codes
+google.golang.org/grpc/credentials
+google.golang.org/grpc/grpclog
+google.golang.org/grpc/internal/credentials
+google.golang.org/grpc/internal/grpclog
+google.golang.org/grpc/internal/pretty
 google.golang.org/grpc/internal/status
 google.golang.org/grpc/metadata
+google.golang.org/grpc/resolver
+google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 # google.golang.org/protobuf v1.28.0
