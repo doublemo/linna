@@ -28,6 +28,7 @@ import (
 	"os"
 
 	"github.com/doublemo/linna/internal/database"
+	"github.com/doublemo/linna/internal/endpoint"
 	"github.com/doublemo/linna/internal/logger"
 	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
@@ -128,6 +129,14 @@ func Serve(ctx context.Context, config Configuration) error {
 	db, dbVersion := database.DbConnect(ctx, startupLogger, config.Database)
 	startupLogger.Info("Database information", zap.String("version", dbVersion))
 
+	// 启动集群
+	if err := endpoint.Initializer(ctx, config.Endpoint); err != nil {
+		startupLogger.Fatal("Failed join cluster", zap.String("error", err.Error()))
+	}
+
+	// 加入集群
+	cluster := endpoint.JoinCluster()
+
 	// 指标
 	config.Metrics.Node = config.Endpoint.ID
 	localMetrics := metrics.NewLocalMetrics(logger, startupLogger, db, config.Metrics)
@@ -145,6 +154,7 @@ func Serve(ctx context.Context, config Configuration) error {
 
 	Shutdown = func() {
 		localMetrics.Stop(logger)
+		cluster.Deregister()
 	}
 	return nil
 }
