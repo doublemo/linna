@@ -134,11 +134,13 @@ func Serve(ctx context.Context, config Configuration) error {
 		startupLogger.Fatal("Failed join cluster", zap.String("error", err.Error()))
 	}
 
+	endpointLocal := endpoint.Endpoint()
+
 	// 加入集群
 	cluster := endpoint.JoinCluster()
 
 	// 指标
-	config.Metrics.Node = config.Endpoint.ID
+	config.Metrics.Node = endpointLocal.ID()
 	localMetrics := metrics.NewLocalMetrics(logger, startupLogger, db, config.Metrics)
 	runtime, i, err := NewRuntime(ctx, localMetrics, config)
 	if err != nil {

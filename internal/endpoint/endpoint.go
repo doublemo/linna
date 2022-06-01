@@ -124,9 +124,19 @@ func Initializer(ctx context.Context, c Configuration) (err error) {
 }
 
 func JoinCluster() sd.Registrar {
-	return etcdv3.NewRegistrar(client, etcdv3.Service{Prefix: prefix, Endpoint: endpoint})
+	registrar := etcdv3.NewRegistrar(client, etcdv3.Service{Prefix: prefix, Endpoint: endpoint})
+	registrar.Register()
+	return registrar
 }
 
 func Endpoint() sd.Endpoint {
 	return endpoint
+}
+
+func Endpoints() ([]sd.Endpoint, error) {
+	if endpointer == nil {
+		return nil, ErrEndpointNil
+	}
+
+	return endpointer.Endpoints()
 }

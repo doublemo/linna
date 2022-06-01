@@ -40,6 +40,7 @@ type Configuration struct {
 	Runtime    RuntimeConfiguration   `yaml:"runtime" json:"runtime" usage:"运行时"`
 	Metrics    metrics.Configuration  `yaml:"metrics" json:"metrics" usage:"指标信息"`
 	Database   database.Configuration `yaml:"db" json:"db" usage:"数据地址,仅支持postgress"`
+	Api        ApiConfiguration       `yaml:"api" json:"api" usage:"Api配置"`
 }
 
 func (c Configuration) Check() error {
