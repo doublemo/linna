@@ -1,0 +1,152 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Linna API v2",
+    "version": "2.0",
+    "contact": {
+      "name": "The Nakama Authors \u0026 Contributors",
+      "url": "https://github.com/doublemo/linna",
+      "email": "hello@linna.com"
+    }
+  },
+  "tags": [
+    {
+      "name": "Linna"
+    }
+  ],
+  "host": "127.0.0.1:7350",
+  "schemes": [
+    "http"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v2/account/session/refresh": {
+      "post": {
+        "operationId": "Linna_SessionRefresh",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiSession"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/apiSessionRefreshRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Linna"
+        ],
+        "security": [
+          {
+            "BasicAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "apiSession": {
+      "type": "object",
+      "properties": {
+        "created": {
+          "type": "boolean",
+          "description": "True if the corresponding account was just created, false otherwise."
+        },
+        "token": {
+          "type": "string",
+          "description": "Authentication credentials."
+        },
+        "refreshToken": {
+          "type": "string",
+          "description": "Refresh token that can be used for session token renewal."
+        }
+      },
+      "description": "A user's session used to authenticate messages."
+    },
+    "apiSessionRefreshRequest": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Refresh token."
+        },
+        "vars": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Extra information that will be bundled in the session token."
+        }
+      },
+      "description": "Authenticate against the server with a refresh token."
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "BasicAuth": {
+      "type": "basic"
+    },
+    "BearerJwt": {
+      "type": ""
+    },
+    "HttpKeyAuth": {
+      "type": "apiKey",
+      "name": "http_key",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "BearerJwt": []
+    }
+  ],
+  "externalDocs": {
+    "description": "Linna server documentation",
+    "url": "https://github.com/doublemo/linna"
+  }
+}

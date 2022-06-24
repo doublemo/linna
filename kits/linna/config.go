@@ -26,16 +26,19 @@ import (
 	"path/filepath"
 
 	"github.com/doublemo/linna/internal/logger"
+	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
 // Configuration 配置
 type Configuration struct {
-	Name        string               `yaml:"name" json:"name" usage:"Linna server’s node name - must be unique."`
-	Config      []string             `yaml:"config" json:"config" usage:"The absolute file path to configuration YAML file."`
-	Datadir     string               `yaml:"data_dir" json:"data_dir" usage:"An absolute path to a writeable folder where Linna will store its data."`
-	Logger      logger.Configuration `yaml:"log" json:"log" usage:"Logger levels and output."`
+	Name        string                `yaml:"name" json:"name" usage:"Linna server’s node name - must be unique."`
+	Config      []string              `yaml:"config" json:"config" usage:"The absolute file path to configuration YAML file."`
+	Datadir     string                `yaml:"data_dir" json:"data_dir" usage:"An absolute path to a writeable folder where Linna will store its data."`
+	Logger      logger.Configuration  `yaml:"log" json:"log" usage:"Logger levels and output."`
+	Api         ApiConfiguration      `yaml:"api" json:"api" usage:"api server."`
+	Metrics     metrics.Configuration `yaml:"metrics" json:"metrics" usage:"Metrics settings."`
 	CurrentPath string
 	log         *zap.Logger
 }
@@ -93,6 +96,8 @@ func NewConfiguration(log *zap.Logger) *Configuration {
 		Name:        "linna",
 		Datadir:     filepath.Join(cwd, "data"),
 		Logger:      logger.NewConfiguration(),
+		Api:         NewApiConfiguration(),
+		Metrics:     metrics.NewConfiguration(),
 		CurrentPath: cwd,
 		log:         log,
 	}

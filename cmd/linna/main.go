@@ -18,7 +18,6 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"math/rand"
 	"os"
 	"runtime"
@@ -83,16 +82,17 @@ func main() {
 		log.Panic(err.Error())
 	}
 
-	fmt.Println("---c", config)
+	startupLogger.Info("Startup done")
 	signal.Handler(ctx, func(sig signal.Command) {
 		switch sig {
 		case signal.INT, signal.TREM:
 			ctxCancelFn()
+			linna.Shutdown()
+
 		case signal.HUP:
 
 		}
 	})
-
 	startupLogger.Info("Linna complete")
 	os.Exit(0)
 }

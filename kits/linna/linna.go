@@ -16,6 +16,10 @@ package linna
 
 import (
 	"context"
+
+	"github.com/doublemo/linna/internal/logger"
+	"github.com/doublemo/linna/internal/metrics"
+	_ "github.com/doublemo/nana/api"
 )
 
 // 退出程序
@@ -23,5 +27,17 @@ var Shutdown = func() {}
 
 // 开启linna服务
 func Serve(ctx context.Context, c Configuration) error {
+	log, startupLogger := logger.Logger()
+
+	// 指标
+	c.Metrics.Node = c.Name
+	localMetrics := metrics.NewLocalMetrics(log, startupLogger, nil, c.Metrics)
+
+	// 启动API服务
+	apiServer := NewApiServer(c, localMetrics).Serve()
+	Shutdown = func() {
+		localMetrics.Stop(log)
+		apiServer.Stop()
+	}
 	return nil
 }
