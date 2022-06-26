@@ -39,6 +39,7 @@ type Configuration struct {
 	Logger      logger.Configuration  `yaml:"log" json:"log" usage:"Logger levels and output."`
 	Api         ApiConfiguration      `yaml:"api" json:"api" usage:"api server."`
 	Metrics     metrics.Configuration `yaml:"metrics" json:"metrics" usage:"Metrics settings."`
+	Runtime     RuntimeConfiguration  `yaml:"runtime" json:"runtime" usage:"runtime settings."`
 	CurrentPath string
 	log         *zap.Logger
 }
@@ -98,6 +99,7 @@ func NewConfiguration(log *zap.Logger) *Configuration {
 		Logger:      logger.NewConfiguration(),
 		Api:         NewApiConfiguration(),
 		Metrics:     metrics.NewConfiguration(),
+		Runtime:     NewRuntimeConfiguration(),
 		CurrentPath: cwd,
 		log:         log,
 	}

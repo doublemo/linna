@@ -19,8 +19,8 @@ type Command int
 
 const (
 	INT Command = iota + 500
-	TREM
-	USER1
-	USER2
+	TERM
+	USR1
+	USR2
 	HUP
 )

@@ -85,7 +85,7 @@ func main() {
 	startupLogger.Info("Startup done")
 	signal.Handler(ctx, func(sig signal.Command) {
 		switch sig {
-		case signal.INT, signal.TREM:
+		case signal.INT, signal.TERM:
 			ctxCancelFn()
 			linna.Shutdown()
 

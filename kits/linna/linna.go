@@ -35,6 +35,8 @@ func Serve(ctx context.Context, c Configuration) error {
 
 	// 启动API服务
 	apiServer := NewApiServer(c, localMetrics).Serve()
+
+	NewRuntime(ctx, c.Runtime)
 	Shutdown = func() {
 		localMetrics.Stop(log)
 		apiServer.Stop()
