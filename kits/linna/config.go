@@ -44,7 +44,15 @@ type Configuration struct {
 	log         *zap.Logger
 }
 
-func (c Configuration) Check() error {
+func (c *Configuration) Check(log *zap.Logger) error {
+	if err := c.Api.Check(log); err != nil {
+		return err
+	}
+
+	if err := c.Runtime.Check(log); err != nil {
+		return err
+	}
+
 	return nil
 }
 

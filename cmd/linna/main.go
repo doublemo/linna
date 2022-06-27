@@ -48,7 +48,7 @@ func main() {
 
 	// 参数解析
 	config := linna.ParseArgs(log, version, commitid, builddate, os.Args)
-	if err := config.Check(); err != nil {
+	if err := config.Check(log); err != nil {
 		startupLogger.Panic(err.Error())
 	}
 

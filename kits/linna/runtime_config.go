@@ -14,12 +14,40 @@
 
 package linna
 
+import (
+	"path/filepath"
+	"strings"
+
+	"go.uber.org/zap"
+)
+
 // 运行时配置
 type RuntimeConfiguration struct {
 	Environment map[string]string `yaml:"-" json:"-"`
 	Env         []string          `yaml:"env" json:"env" usage:"Values to pass into Runtime as environment variables."`
 	Path        string            `yaml:"path" json:"path" usage:"Path for the server to scan for Go library files."`
 	HTTPKey     string            `yaml:"http_key" json:"http_key" usage:"Runtime HTTP Invocation key."`
+}
+
+func (c *RuntimeConfiguration) Check(log *zap.Logger) error {
+	if c.Path == "" {
+		c.Path = filepath.Join("./", "data", "modules")
+	}
+
+	c.Environment = make(map[string]string, 0)
+	for _, e := range c.Env {
+		if !strings.Contains(e, "=") {
+			log.Fatal("Invalid runtime environment value.", zap.String("value", e))
+		}
+
+		kv := strings.SplitN(e, "=", 2)
+		if len(kv) == 1 {
+			c.Environment[kv[0]] = ""
+		} else if len(kv) == 2 {
+			c.Environment[kv[0]] = kv[1]
+		}
+	}
+	return nil
 }
 
 func NewRuntimeConfiguration() RuntimeConfiguration {
