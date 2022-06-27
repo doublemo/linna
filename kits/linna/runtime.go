@@ -42,8 +42,6 @@ func NewRuntime(ctx context.Context, log *zap.Logger, c Configuration) (*Runtime
 		return nil, err
 	}
 
-	log.Info("Initialising runtime event queue processor", zap.Any("paths", paths))
-
 	runtimeGo, err := NewRuntimeGo(ctx, log, c.Runtime, paths...)
 	if err != nil {
 		return nil, err

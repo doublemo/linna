@@ -23,8 +23,8 @@ import (
 
 type RuntimeRpcValues struct {
 	Id          string
-	Headers     map[string]string
-	QueryParams map[string]string
+	Headers     map[string][]string
+	QueryParams map[string][]string
 	UserId      string
 	Username    string
 	Vars        map[string]string
