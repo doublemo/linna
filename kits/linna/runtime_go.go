@@ -27,10 +27,33 @@ import (
 )
 
 type RuntimeGo struct {
-	ModulePaths []string
+	logger      *zap.Logger
+	config      RuntimeConfiguration
+	initializer *RuntimeGoInitializer
+	module      *RuntimeGoModule
+	modulePaths []string
+}
+
+func (r *RuntimeGo) GetInitializer() *RuntimeGoInitializer {
+	return r.initializer
+}
+
+func (r *RuntimeGo) GetModule() *RuntimeGoModule {
+	return r.module
 }
 
 func NewRuntimeGo(ctx context.Context, log *zap.Logger, c RuntimeConfiguration, paths ...string) (*RuntimeGo, error) {
+	runtimeLogger := NewRuntimeGoLogger(log)
+	module := &RuntimeGoModule{}
+	initializer := &RuntimeGoInitializer{
+		config:   c,
+		logger:   runtimeLogger,
+		module:   module,
+		rpc:      make(map[string]RuntimeRpcFunction, 0),
+		beforeRt: make(map[string]RuntimeBeforeRtFunction, 0),
+		afterRt:  make(map[string]RuntimeAfterRtFunction, 0),
+	}
+
 	modulePaths := make([]string, 0)
 	for _, path := range paths {
 		if strings.ToLower(filepath.Ext(path)) != ".so" {
@@ -42,7 +65,7 @@ func NewRuntimeGo(ctx context.Context, log *zap.Logger, c RuntimeConfiguration, 
 			return nil, err
 		}
 
-		if err := fn(ctx, nil, nil, nil, nil); err != nil {
+		if err := fn(ctx, runtimeLogger, nil, module, initializer); err != nil {
 			log.Fatal("Error returned by InitModule function in Go module", zap.String("name", name), zap.Error(err))
 			return nil, errors.New("error returned by InitModule function in Go module")
 		}
@@ -51,11 +74,15 @@ func NewRuntimeGo(ctx context.Context, log *zap.Logger, c RuntimeConfiguration, 
 
 	log.Info("Go runtime modules loaded")
 	return &RuntimeGo{
-		ModulePaths: modulePaths,
+		logger:      log,
+		config:      c,
+		module:      module,
+		initializer: initializer,
+		modulePaths: modulePaths,
 	}, nil
 }
 
-func openGoModule(log *zap.Logger, rootPath, path string) (string, string, runtime.InitModuleFn, error) {
+func openGoModule(log *zap.Logger, rootPath, path string) (string, string, func(context.Context, runtime.Logger, *sql.DB, runtime.Module, runtime.Initializer) error, error) {
 	relPath, _ := filepath.Rel(rootPath, path)
 	name := strings.TrimSuffix(relPath, filepath.Ext(relPath))
 
@@ -80,5 +107,5 @@ func openGoModule(log *zap.Logger, rootPath, path string) (string, string, runti
 		return "", "", nil, errors.New("error reading InitModule function in Go module")
 	}
 
-	return relPath, name, runtime.InitModuleFn(fn), nil
+	return relPath, name, fn, nil
 }

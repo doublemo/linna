@@ -36,6 +36,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -43,11 +44,13 @@ import (
 type ctxFullMethodKey struct{}
 
 type ApiServer struct {
+	logger *zap.Logger
 	pb.UnimplementedLinnaServer
 	config            Configuration
 	metrics           metrics.Metrics
 	grpcServer        *grpc.Server
 	grpcGatewayServer *http.Server
+	runtime           *Runtime
 }
 
 func (s *ApiServer) Serve() *ApiServer {
@@ -57,17 +60,19 @@ func (s *ApiServer) Serve() *ApiServer {
 }
 
 func (s *ApiServer) serveGrpc() {
-	log := logger.StartupLogger()
+	log := s.logger
 	serverOpts := []grpc.ServerOption{
 		grpc.StatsHandler(&metrics.MetricsGrpcHandler{MetricsFn: s.metrics.Api}),
 		grpc.MaxRecvMsgSize(int(s.config.Api.MaxRequestSizeBytes)),
-		grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-			ctx, err := securityInterceptorFunc(ctx, s.config, req, info)
-			if err != nil {
-				return nil, err
-			}
-			return handler(ctx, req)
-		}),
+		grpc.ChainUnaryInterceptor(
+			func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+				ctx, err := securityInterceptorFunc(ctx, s.config, req, info)
+				if err != nil {
+					return nil, err
+				}
+				return handler(ctx, req)
+			},
+		),
 	}
 
 	if s.config.Api.TLSCert != nil {
@@ -90,7 +95,7 @@ func (s *ApiServer) serveGrpc() {
 }
 
 func (s *ApiServer) serveGrpcgateway() {
-	log := logger.StartupLogger()
+	log := s.logger
 	var gatewayContextTimeoutMs string
 	if s.config.Api.IdleTimeoutMs > 500 {
 		// Ensure the GRPC Gateway timeout is just under the idle timeout (if possible) to ensure it has priority.
@@ -151,7 +156,7 @@ func (s *ApiServer) serveGrpcgateway() {
 		cert := credentials.NewTLS(&tls.Config{RootCAs: certPool, InsecureSkipVerify: true})
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(cert))
 	} else {
-		dialOpts = append(dialOpts, grpc.WithInsecure())
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
 	if err := pb.RegisterLinnaHandlerFromEndpoint(ctx, grpcGateway, dialAddr, dialOpts); err != nil {
@@ -235,10 +240,12 @@ func (s *ApiServer) Stop() {
 	s.grpcServer.GracefulStop()
 }
 
-func NewApiServer(c Configuration, m metrics.Metrics) *ApiServer {
+func NewApiServer(log *zap.Logger, c Configuration, m metrics.Metrics, r *Runtime) *ApiServer {
 	return &ApiServer{
+		logger:  log,
 		config:  c,
 		metrics: m,
+		runtime: r,
 	}
 }
 

@@ -61,9 +61,131 @@
           }
         ]
       }
+    },
+    "/v2/rpc/{id}": {
+      "get": {
+        "summary": "Execute a Lua function on the server.",
+        "operationId": "Linna_RpcFunc2",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiRpc"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "description": "The identifier of the function.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "payload",
+            "description": "The payload of the function which must be a JSON object.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "httpKey",
+            "description": "The authentication key used when executed as a non-client HTTP request.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Linna"
+        ],
+        "security": [
+          {
+            "BearerJwt": [],
+            "HttpKeyAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Execute a Lua function on the server.",
+        "operationId": "Linna_RpcFunc",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/apiRpc"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "description": "The identifier of the function.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "payload",
+            "description": "The payload of the function which must be a JSON object.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "httpKey",
+            "description": "The authentication key used when executed as a non-client HTTP request.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Linna"
+        ],
+        "security": [
+          {
+            "BearerJwt": [],
+            "HttpKeyAuth": []
+          }
+        ]
+      }
     }
   },
   "definitions": {
+    "apiRpc": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The identifier of the function."
+        },
+        "payload": {
+          "type": "string",
+          "description": "The payload of the function which must be a JSON object."
+        },
+        "httpKey": {
+          "type": "string",
+          "description": "The authentication key used when executed as a non-client HTTP request."
+        }
+      },
+      "description": "Execute an Lua function on the server."
+    },
     "apiSession": {
       "type": "object",
       "properties": {

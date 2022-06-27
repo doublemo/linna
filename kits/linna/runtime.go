@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/doublemo/linna/internal/logger"
 	"go.uber.org/zap"
 )
 
@@ -28,16 +27,24 @@ type Runtime struct {
 	runtimeGo *RuntimeGo
 }
 
-func NewRuntime(ctx context.Context, c RuntimeConfiguration) (*Runtime, error) {
-	log := logger.StartupLogger()
-	paths, err := scanRuntimePath(log, c.Path)
+func (r *Runtime) Rpc(id string) (RuntimeRpcFunction, bool) {
+	initializer := r.runtimeGo.GetInitializer()
+	fn, ok := initializer.Rpc(id)
+	if !ok {
+		return nil, false
+	}
+	return fn, true
+}
+
+func NewRuntime(ctx context.Context, log *zap.Logger, c Configuration) (*Runtime, error) {
+	paths, err := scanRuntimePath(log, c.Runtime.Path)
 	if err != nil {
 		return nil, err
 	}
 
 	log.Info("Initialising runtime event queue processor", zap.Any("paths", paths))
 
-	runtimeGo, err := NewRuntimeGo(ctx, log, c, paths...)
+	runtimeGo, err := NewRuntimeGo(ctx, log, c.Runtime, paths...)
 	if err != nil {
 		return nil, err
 	}

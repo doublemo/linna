@@ -20,6 +20,7 @@ import (
 	"github.com/doublemo/linna/internal/logger"
 	"github.com/doublemo/linna/internal/metrics"
 	_ "github.com/doublemo/nana/api"
+	"go.uber.org/zap"
 )
 
 // 退出程序
@@ -33,10 +34,13 @@ func Serve(ctx context.Context, c Configuration) error {
 	c.Metrics.Node = c.Name
 	localMetrics := metrics.NewLocalMetrics(log, startupLogger, nil, c.Metrics)
 
+	r, err := NewRuntime(ctx, startupLogger, c)
+	if err != nil {
+		log.Panic("panic", zap.Error(err))
+	}
 	// 启动API服务
-	apiServer := NewApiServer(c, localMetrics).Serve()
+	apiServer := NewApiServer(startupLogger, c, localMetrics, r).Serve()
 
-	NewRuntime(ctx, c.Runtime)
 	Shutdown = func() {
 		localMetrics.Stop(log)
 		apiServer.Stop()

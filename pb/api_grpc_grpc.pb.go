@@ -24,6 +24,8 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type LinnaClient interface {
 	SessionRefresh(ctx context.Context, in *api.SessionRefreshRequest, opts ...grpc.CallOption) (*api.Session, error)
+	// Execute a Lua function on the server.
+	RpcFunc(ctx context.Context, in *api.Rpc, opts ...grpc.CallOption) (*api.Rpc, error)
 }
 
 type linnaClient struct {
@@ -43,11 +45,22 @@ func (c *linnaClient) SessionRefresh(ctx context.Context, in *api.SessionRefresh
 	return out, nil
 }
 
+func (c *linnaClient) RpcFunc(ctx context.Context, in *api.Rpc, opts ...grpc.CallOption) (*api.Rpc, error) {
+	out := new(api.Rpc)
+	err := c.cc.Invoke(ctx, "/linna.api.Linna/RpcFunc", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LinnaServer is the server API for Linna service.
 // All implementations must embed UnimplementedLinnaServer
 // for forward compatibility
 type LinnaServer interface {
 	SessionRefresh(context.Context, *api.SessionRefreshRequest) (*api.Session, error)
+	// Execute a Lua function on the server.
+	RpcFunc(context.Context, *api.Rpc) (*api.Rpc, error)
 	mustEmbedUnimplementedLinnaServer()
 }
 
@@ -57,6 +70,9 @@ type UnimplementedLinnaServer struct {
 
 func (UnimplementedLinnaServer) SessionRefresh(context.Context, *api.SessionRefreshRequest) (*api.Session, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SessionRefresh not implemented")
+}
+func (UnimplementedLinnaServer) RpcFunc(context.Context, *api.Rpc) (*api.Rpc, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RpcFunc not implemented")
 }
 func (UnimplementedLinnaServer) mustEmbedUnimplementedLinnaServer() {}
 
@@ -89,6 +105,24 @@ func _Linna_SessionRefresh_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Linna_RpcFunc_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(api.Rpc)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LinnaServer).RpcFunc(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/linna.api.Linna/RpcFunc",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LinnaServer).RpcFunc(ctx, req.(*api.Rpc))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Linna_ServiceDesc is the grpc.ServiceDesc for Linna service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -99,6 +133,10 @@ var Linna_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SessionRefresh",
 			Handler:    _Linna_SessionRefresh_Handler,
+		},
+		{
+			MethodName: "RpcFunc",
+			Handler:    _Linna_RpcFunc_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

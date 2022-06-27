@@ -25,5 +25,11 @@ import (
 // build : go build --trimpath --mod=vendor --buildmode=plugin -o ./samples.so
 func InitModule(ctx context.Context, log runtime.Logger, db *sql.DB, module runtime.Module, initializer runtime.Initializer) error {
 	fmt.Println("-------------Hello World---------------")
+
+	initializer.RegisterRpc("callme", func(ctx context.Context, logger runtime.Logger, db *sql.DB, m runtime.Module, payload string) (string, error) {
+		fmt.Println("-------------Call Me---------------")
+		m.AuthenticateEmail()
+		return `{"OK":true}`, nil
+	})
 	return nil
 }

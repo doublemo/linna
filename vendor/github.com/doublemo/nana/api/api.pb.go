@@ -647,6 +647,109 @@ func (x *User) GetAppleId() string {
 	return ""
 }
 
+// A notification in the server.
+type Notification struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// ID of the Notification.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Subject of the notification.
+	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	// Content of the notification in JSON.
+	Content string `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	// Category code for this notification.
+	Code int32 `protobuf:"varint,4,opt,name=code,proto3" json:"code,omitempty"`
+	// ID of the sender, if a user. Otherwise 'null'.
+	SenderId string `protobuf:"bytes,5,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	// The UNIX time when the notification was created.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// True if this notification was persisted to the database.
+	Persistent bool `protobuf:"varint,7,opt,name=persistent,proto3" json:"persistent,omitempty"`
+}
+
+func (x *Notification) Reset() {
+	*x = Notification{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Notification) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Notification) ProtoMessage() {}
+
+func (x *Notification) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Notification.ProtoReflect.Descriptor instead.
+func (*Notification) Descriptor() ([]byte, []int) {
+	return file_api_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Notification) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Notification) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *Notification) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *Notification) GetCode() int32 {
+	if x != nil {
+		return x.Code
+	}
+	return 0
+}
+
+func (x *Notification) GetSenderId() string {
+	if x != nil {
+		return x.SenderId
+	}
+	return ""
+}
+
+func (x *Notification) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *Notification) GetPersistent() bool {
+	if x != nil {
+		return x.Persistent
+	}
+	return false
+}
+
 var File_api_proto protoreflect.FileDescriptor
 
 var file_api_proto_rawDesc = []byte{
@@ -746,9 +849,24 @@ var file_api_proto_rawDesc = []byte{
 	0x11, 0x20, 0x01, 0x28, 0x09, 0x52, 0x15, 0x66, 0x61, 0x63, 0x65, 0x62, 0x6f, 0x6f, 0x6b, 0x49,
 	0x6e, 0x73, 0x74, 0x61, 0x6e, 0x74, 0x47, 0x61, 0x6d, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a, 0x08,
 	0x61, 0x70, 0x70, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x12, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
-	0x61, 0x70, 0x70, 0x6c, 0x65, 0x49, 0x64, 0x42, 0x1e, 0x5a, 0x1c, 0x67, 0x69, 0x74, 0x68, 0x75,
-	0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x75, 0x62, 0x6c, 0x65, 0x6d, 0x6f, 0x2f, 0x6e,
-	0x61, 0x6e, 0x61, 0x2f, 0x61, 0x70, 0x69, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x61, 0x70, 0x70, 0x6c, 0x65, 0x49, 0x64, 0x22, 0xe0, 0x01, 0x0a, 0x0c, 0x4e, 0x6f, 0x74, 0x69,
+	0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x73, 0x75, 0x62, 0x6a,
+	0x65, 0x63, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x75, 0x62, 0x6a, 0x65,
+	0x63, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x12, 0x0a, 0x04,
+	0x63, 0x6f, 0x64, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x05, 0x52, 0x04, 0x63, 0x6f, 0x64, 0x65,
+	0x12, 0x1b, 0x0a, 0x09, 0x73, 0x65, 0x6e, 0x64, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x05, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x08, 0x73, 0x65, 0x6e, 0x64, 0x65, 0x72, 0x49, 0x64, 0x12, 0x3b, 0x0a,
+	0x0b, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x06, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0a,
+	0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x12, 0x1e, 0x0a, 0x0a, 0x70, 0x65,
+	0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x74, 0x18, 0x07, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0a,
+	0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x74, 0x42, 0x1e, 0x5a, 0x1c, 0x67, 0x69,
+	0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x75, 0x62, 0x6c, 0x65, 0x6d,
+	0x6f, 0x2f, 0x6e, 0x61, 0x6e, 0x61, 0x2f, 0x61, 0x70, 0x69, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x33,
 }
 
 var (
@@ -763,7 +881,7 @@ func file_api_proto_rawDescGZIP() []byte {
 	return file_api_proto_rawDescData
 }
 
-var file_api_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_api_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_api_proto_goTypes = []interface{}{
 	(*Account)(nil),               // 0: linna.api.Account
 	(*AccountDevice)(nil),         // 1: linna.api.AccountDevice
@@ -772,24 +890,26 @@ var file_api_proto_goTypes = []interface{}{
 	(*Rpc)(nil),                   // 4: linna.api.Rpc
 	(*Session)(nil),               // 5: linna.api.Session
 	(*User)(nil),                  // 6: linna.api.User
-	nil,                           // 7: linna.api.AccountDevice.VarsEntry
-	nil,                           // 8: linna.api.SessionRefreshRequest.VarsEntry
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(*Notification)(nil),          // 7: linna.api.Notification
+	nil,                           // 8: linna.api.AccountDevice.VarsEntry
+	nil,                           // 9: linna.api.SessionRefreshRequest.VarsEntry
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
 }
 var file_api_proto_depIdxs = []int32{
-	6, // 0: linna.api.Account.user:type_name -> linna.api.User
-	1, // 1: linna.api.Account.devices:type_name -> linna.api.AccountDevice
-	9, // 2: linna.api.Account.verify_time:type_name -> google.protobuf.Timestamp
-	9, // 3: linna.api.Account.disable_time:type_name -> google.protobuf.Timestamp
-	7, // 4: linna.api.AccountDevice.vars:type_name -> linna.api.AccountDevice.VarsEntry
-	8, // 5: linna.api.SessionRefreshRequest.vars:type_name -> linna.api.SessionRefreshRequest.VarsEntry
-	9, // 6: linna.api.User.create_time:type_name -> google.protobuf.Timestamp
-	9, // 7: linna.api.User.update_time:type_name -> google.protobuf.Timestamp
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	6,  // 0: linna.api.Account.user:type_name -> linna.api.User
+	1,  // 1: linna.api.Account.devices:type_name -> linna.api.AccountDevice
+	10, // 2: linna.api.Account.verify_time:type_name -> google.protobuf.Timestamp
+	10, // 3: linna.api.Account.disable_time:type_name -> google.protobuf.Timestamp
+	8,  // 4: linna.api.AccountDevice.vars:type_name -> linna.api.AccountDevice.VarsEntry
+	9,  // 5: linna.api.SessionRefreshRequest.vars:type_name -> linna.api.SessionRefreshRequest.VarsEntry
+	10, // 6: linna.api.User.create_time:type_name -> google.protobuf.Timestamp
+	10, // 7: linna.api.User.update_time:type_name -> google.protobuf.Timestamp
+	10, // 8: linna.api.Notification.create_time:type_name -> google.protobuf.Timestamp
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_init() }
@@ -882,6 +1002,18 @@ func file_api_proto_init() {
 				return nil
 			}
 		}
+		file_api_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Notification); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -889,7 +1021,7 @@ func file_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_api_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

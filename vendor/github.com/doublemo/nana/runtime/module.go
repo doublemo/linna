@@ -14,4 +14,6 @@
 
 package runtime
 
-type Module interface{}
+type Module interface {
+	AuthenticateEmail()
+}

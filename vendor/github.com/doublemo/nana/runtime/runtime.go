@@ -17,6 +17,8 @@ package runtime
 import (
 	"context"
 	"database/sql"
+
+	"github.com/doublemo/nana/rtapi"
 )
 
 // 定义运行时常量
@@ -26,6 +28,9 @@ const (
 	//   envs := ctx.Value(runtime.RUNTIME_CTX_ENV).(map[string]string)
 	// This can always be safely cast into a `map[string]string`.
 	RUNTIME_CTX_ENV = "env"
+
+	// The node ID where the current runtime context is executing.
+	RUNTIME_CTX_NODE = "node"
 
 	// Http headers. Only applicable to HTTP RPC requests.
 	RUNTIME_CTX_HEADERS = "headers"
@@ -61,7 +66,8 @@ const (
 // 定义模块入口名称
 const INIT_MODULE_FUNC_NAME = "InitModule"
 
-// 运行时初始函数
-type InitModuleFn func(context.Context, Logger, *sql.DB, Module, Initializer) error
-
-type Initializer interface{}
+type Initializer interface {
+	RegisterRpc(id string, fn func(ctx context.Context, logger Logger, db *sql.DB, m Module, payload string) (string, error)) error
+	RegisterBeforeRt(id string, fn func(ctx context.Context, logger Logger, db *sql.DB, m Module, envelope *rtapi.Envelope) (*rtapi.Envelope, error)) error
+	RegisterAfterRt(id string, fn func(ctx context.Context, logger Logger, db *sql.DB, m Module, out, in *rtapi.Envelope) error) error
+}

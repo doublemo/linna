@@ -124,3 +124,21 @@ message User {
     // The Apple Sign In ID in the user's account.
     string apple_id = 18;
   }
+
+  // A notification in the server.
+message Notification {
+  // ID of the Notification.
+  string id = 1;
+  // Subject of the notification.
+  string subject = 2;
+  // Content of the notification in JSON.
+  string content = 3;
+  // Category code for this notification.
+  int32 code = 4;
+  // ID of the sender, if a user. Otherwise 'null'.
+  string sender_id = 5;
+  // The UNIX time when the notification was created.
+  google.protobuf.Timestamp create_time = 6;
+  // True if this notification was persisted to the database.
+  bool persistent = 7;
+}

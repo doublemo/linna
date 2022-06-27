@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package linna.realtime;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "api/api.proto";
+
+option go_package = "github.com/doublemo/nana/rtapi";
+
+// An envelope for a realtime message.
+message Envelope {
+  string cid = 1;
+  oneof message {
+    Error error = 2;
+    // Notifications send by the server.
+    Notifications notifications = 3;
+    // RPC call or response.
+    api.Rpc rpc = 4;
+    // Application-level heartbeat and connection check.
+    Ping ping = 5;
+    // Application-level heartbeat and connection check response.
+    Pong pong = 6;
+  }
+}
+
+
+// A logical error which may occur on the server.
+message Error {
+    // The selection of possible error codes.
+    enum Code {
+      // An unexpected result from the server.
+      RUNTIME_EXCEPTION = 0;
+      // The server received a message which is not recognised.
+      UNRECOGNIZED_PAYLOAD = 1;
+      // A message was expected but contains no content.
+      MISSING_PAYLOAD = 2;
+      // Fields in the message have an invalid format.
+      BAD_INPUT = 3;
+      // The runtime function does not exist on the server.
+      RUNTIME_FUNCTION_NOT_FOUND = 4;
+      // The runtime function executed with an error.
+      RUNTIME_FUNCTION_EXCEPTION = 5;
+    }
+  
+    // The error code which should be one of "Error.Code" enums.
+    int32 code = 1;
+    // A message in English to help developers debug the response.
+    string message = 2;
+    // Additional error details which may be different for each response.
+    map<string, string> context = 3;
+  }
+
+
+  // A collection of zero or more notifications.
+message Notifications {
+    // Collection of notifications.
+    repeated api.Notification notifications = 1;
+}
+  
+// Application-level heartbeat and connection check.
+message Ping {}
+
+// Application-level heartbeat and connection check response.
+message Pong {}
