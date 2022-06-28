@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/doublemo/linna/cores/endpoint"
-	"github.com/doublemo/linna/cores/internal/instance"
 	"github.com/doublemo/linna/cores/sd"
+	"github.com/doublemo/linna/cores/sd/internal/instance"
 	"go.uber.org/zap"
 )
 
