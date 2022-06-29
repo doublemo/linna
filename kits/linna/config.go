@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/doublemo/linna/cores/cluster"
 	"github.com/doublemo/linna/internal/logger"
 	"github.com/doublemo/linna/internal/metrics"
 	"go.uber.org/zap"
@@ -40,6 +41,7 @@ type Configuration struct {
 	Api         ApiConfiguration      `yaml:"api" json:"api" usage:"api server."`
 	Metrics     metrics.Configuration `yaml:"metrics" json:"metrics" usage:"Metrics settings."`
 	Runtime     RuntimeConfiguration  `yaml:"runtime" json:"runtime" usage:"runtime settings."`
+	Cluster     cluster.Configuration `yaml:"cluster" json:"cluster" usage:"cluster settings."`
 	CurrentPath string
 	log         *zap.Logger
 }
@@ -91,6 +93,7 @@ func (c *Configuration) parseYml(cfg string) error {
 	if err != nil {
 		return err
 	}
+
 	c.log.Info("Successfully loaded config file", zap.String("path", cfg))
 	return nil
 }
@@ -108,6 +111,7 @@ func NewConfiguration(log *zap.Logger) *Configuration {
 		Api:         NewApiConfiguration(),
 		Metrics:     metrics.NewConfiguration(),
 		Runtime:     NewRuntimeConfiguration(),
+		Cluster:     cluster.NewConfiguration(),
 		CurrentPath: cwd,
 		log:         log,
 	}

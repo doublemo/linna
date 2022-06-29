@@ -1,6 +1,4 @@
-endpoint: 
-  id: "linna-1"
-  name: "linna"
+name: node1  
   
 log:
   level: "DEBUG"
@@ -18,3 +16,22 @@ metrics:
 db: 
   address:
      - "postgres:123456@localhost:5432/prodgamedb"
+
+
+cluster:
+  name: "linna" # 集群名称
+  prefex: "/cluster/v1" # 集群监听前缀
+  etcd: 
+    endpoints:
+    - "http://192.168.0.228:2379"
+    - "http://192.168.0.228:2380"
+    - "http://192.168.0.228:2381"
+    dial_timeout: 3
+    dial_keep_alive_time: 15
+    username: ""
+    password: ""
+    cert: ""
+    key: ""
+    ca_cert: ""
+
+

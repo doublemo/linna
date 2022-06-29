@@ -2,14 +2,10 @@ package cluster_test
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/doublemo/linna/cores/cluster"
 	"github.com/doublemo/linna/cores/sd/etcdv3"
-	"go.uber.org/zap"
 )
 
 func TestCluster(t *testing.T) {
@@ -21,27 +17,17 @@ func TestCluster(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ch := make(chan struct{}, 1)
-	go client.WatchPrefix("/test", ch)
-	go func() {
-		for range ch {
-			fmt.Println(client.GetEntries("/test"))
-		}
-	}()
+	// c, err := cluster.New(context.Background(), zap.NewNop(), "/linna/v1", client)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
-	err = client.Register(etcdv3.Service{Key: "/test/v1", Value: "testValue"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	c, err := cluster.New(context.Background(), zap.NewNop(), "/linna/v1", client)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	fmt.Println(c)
-	data, _ := json.Marshal(cluster.NewNodeLocal("ddddd"))
-	fmt.Println(string(data))
-	time.Sleep(time.Second * 13)
-	t.Fatal(client.GetEntries("/test"))
+	// time.Sleep(time.Second)
+	// node := cluster.NewNode("tewst1", "grpc", "192.168.0.228:88989")
+	// node.SetValue("sss", "xxxxx")
+	// if err := c.Join(node); err != nil {
+	// 	t.Fatal(err)
+	// }
+	time.Sleep(time.Second * 5)
+	t.Fatal(client.GetEntries("/linna/v1"))
 }

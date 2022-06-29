@@ -51,7 +51,7 @@ func ParseArgs(log *zap.Logger, v, commitid, buildAt string, args []string) *Con
 
 	mainConfig := NewConfiguration(log)
 	mainConfig.Config = configFilePath.Config
-	if err := configFilePath.Parse(); err != nil {
+	if err := mainConfig.Parse(); err != nil {
 		log.Fatal("could not parse config file", zap.Error(err))
 	}
 

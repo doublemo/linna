@@ -17,9 +17,9 @@ package linna
 import (
 	"context"
 
+	"github.com/doublemo/linna/cores/cluster"
 	"github.com/doublemo/linna/internal/logger"
 	"github.com/doublemo/linna/internal/metrics"
-	_ "github.com/doublemo/nana/api"
 	"go.uber.org/zap"
 )
 
@@ -36,12 +36,19 @@ func Serve(ctx context.Context, c Configuration) error {
 
 	r, err := NewRuntime(ctx, startupLogger, c)
 	if err != nil {
-		log.Panic("panic", zap.Error(err))
+		log.Panic("runtime", zap.Error(err))
 	}
 	// 启动API服务
 	apiServer := NewApiServer(startupLogger, c, localMetrics, r).Serve()
 
+	node := cluster.NewNode(c.Name, "http", c.Api.Address)
+	clusters, err := cluster.New(ctx, startupLogger, node, c.Cluster)
+	if err != nil {
+		log.Panic("cluster", zap.Error(err))
+	}
+
 	Shutdown = func() {
+		clusters.Shutdown()
 		localMetrics.Stop(log)
 		apiServer.Stop()
 	}
