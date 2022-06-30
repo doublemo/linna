@@ -44,6 +44,7 @@ import (
 
 type ApiConfiguration struct {
 	ServerKey            string            `yaml:"server_key" json:"server_key" usage:"Server key to use to establish a connection to the server."`
+	Domain               string            `yaml:"domain" json:"domain" usage:"The domain for services address."`
 	Port                 int               `yaml:"port" json:"port" usage:"The port for accepting connections from the client for the given interface(s), address(es), and protocol(s). Default 7350."`
 	Address              string            `yaml:"address" json:"address" usage:"The IP address of the interface to listen for client traffic on. Default listen on all available addresses/interfaces."`
 	Protocol             string            `yaml:"protocol" json:"protocol" usage:"The network protocol to listen for traffic on. Possible values are 'tcp' for both IPv4 and IPv6, 'tcp4' for IPv4 only, or 'tcp6' for IPv6 only. Default 'tcp'."`
@@ -100,6 +101,7 @@ func (c *ApiConfiguration) Check(log *zap.Logger) error {
 func NewApiConfiguration() ApiConfiguration {
 	return ApiConfiguration{
 		ServerKey:            "linna-server-key",
+		Domain:               "127.0.0.1:19080",
 		Port:                 19080,
 		Address:              "",
 		Protocol:             "tcp",

@@ -34,18 +34,18 @@ func Serve(ctx context.Context, c Configuration) error {
 	c.Metrics.Node = c.Name
 	localMetrics := metrics.NewLocalMetrics(log, startupLogger, nil, c.Metrics)
 
+	// 启动集群
+	clusters, err := cluster.New(ctx, startupLogger, cluster.NewNode(c.Name, cluster.ProtocolHTTP, c.Api.Domain), c.Cluster)
+	if err != nil {
+		log.Panic("cluster", zap.Error(err))
+	}
+
 	r, err := NewRuntime(ctx, startupLogger, c)
 	if err != nil {
 		log.Panic("runtime", zap.Error(err))
 	}
 	// 启动API服务
 	apiServer := NewApiServer(startupLogger, c, localMetrics, r).Serve()
-
-	node := cluster.NewNode(c.Name, "http", c.Api.Address)
-	clusters, err := cluster.New(ctx, startupLogger, node, c.Cluster)
-	if err != nil {
-		log.Panic("cluster", zap.Error(err))
-	}
 
 	Shutdown = func() {
 		clusters.Shutdown()
